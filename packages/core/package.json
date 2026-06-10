@@ -12,14 +12,11 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",
-    "better-sqlite3": "^9.4.0",
-    "drizzle-orm": "^0.30.0",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.0",
+    "@types/bun": "latest",
     "@types/uuid": "^9.0.0",
-    "drizzle-kit": "^0.20.0",
     "typescript": "^5.4.0"
   }
 }

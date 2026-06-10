@@ -1,7 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
+import type { MessageCreateParamsNonStreaming } from "@anthropic-ai/sdk/resources/messages.js";
+import type { RequestOptions } from "@anthropic-ai/sdk/core.js";
 import { v4 as uuidv4 } from "uuid";
 import { getDb, insertSession, insertTurn, insertGCEvent, updateSessionLastActive } from "./db.js";
-import { computeGCState, MODEL_CONTEXT_WINDOWS, GC_THRESHOLDS } from "./types.js";
+import { computeGCState, MODEL_CONTEXT_WINDOWS } from "./types.js";
 import type { Session, Turn, GCEvent, GCState } from "./types.js";
 
 interface WrapperOptions {
@@ -13,7 +15,7 @@ interface WrapperOptions {
 
 interface InstrumentedClient {
   messages: {
-    create: typeof Anthropic.prototype.messages.create;
+    create(body: MessageCreateParamsNonStreaming, options?: RequestOptions): Promise<Anthropic.Message>;
   };
   sessionId: string;
   getHealth: () => { ctxPct: number; gcState: GCState; turnCount: number };
@@ -34,7 +36,7 @@ export function createInstrumentedClient(
   let turnIndex = 0;
   let lastGCState: GCState = "clean";
 
-  const create: typeof anthropic.messages.create = async (params, requestOptions) => {
+  async function create(params: MessageCreateParamsNonStreaming, requestOptions?: RequestOptions): Promise<Anthropic.Message> {
     const model = params.model;
     const ctxWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200_000;
 
@@ -55,7 +57,7 @@ export function createInstrumentedClient(
     }
 
     const start = Date.now();
-    const response = await anthropic.messages.create(params as never, requestOptions as never);
+    const response = await anthropic.messages.create(params, requestOptions);
     const latencyMs = Date.now() - start;
 
     if ("usage" in response) {
@@ -97,13 +99,13 @@ export function createInstrumentedClient(
     }
 
     return response;
-  };
+  }
 
   return {
     messages: { create },
     sessionId,
     getHealth: () => {
-      const ctxWindow = MODEL_CONTEXT_WINDOWS["claude-sonnet-4-6"];
+      const ctxWindow = MODEL_CONTEXT_WINDOWS["claude-sonnet-4-6"] ?? 200_000;
       const ctxPct = cumulativeTokens / ctxWindow;
       return { ctxPct, gcState: computeGCState(ctxPct), turnCount: turnIndex };
     },

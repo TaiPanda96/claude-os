@@ -32,8 +32,8 @@ app.get("/sessions/:id", (c) => {
 app.get("/sessions/:id/gc-events", (c) => {
   const db = getDb();
   const events = db.prepare(`
-    SELECT * FROM gc_events WHERE session_id = ? ORDER BY created_at ASC
-  `).all(c.req.param("id"));
+    SELECT * FROM gc_events WHERE session_id = $sessionId ORDER BY created_at ASC
+  `).all({ $sessionId: c.req.param("id") });
   return c.json(events);
 });
 
