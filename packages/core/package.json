@@ -8,7 +8,10 @@
   "scripts": {
     "dev": "bun run --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "harness": "bun run src/harness.ts",
+    "export": "bun run src/export.ts",
+    "sessions": "bun run src/export.ts --list"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.24.0",

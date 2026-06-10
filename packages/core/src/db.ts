@@ -31,16 +31,19 @@ function migrate(db: Database): void {
   `);
   db.run(`
     CREATE TABLE IF NOT EXISTS turns (
-      id                TEXT PRIMARY KEY,
-      session_id        TEXT NOT NULL REFERENCES sessions(id),
-      turn_index        INTEGER NOT NULL,
-      input_tokens      INTEGER NOT NULL,
-      output_tokens     INTEGER NOT NULL,
-      cumulative_tokens INTEGER NOT NULL,
-      ctx_pct           REAL NOT NULL,
-      latency_ms        INTEGER NOT NULL,
-      stop_reason       TEXT,
-      created_at        INTEGER NOT NULL
+      id                    TEXT PRIMARY KEY,
+      session_id            TEXT NOT NULL REFERENCES sessions(id),
+      turn_index            INTEGER NOT NULL,
+      input_tokens          INTEGER NOT NULL,
+      output_tokens         INTEGER NOT NULL,
+      cumulative_tokens     INTEGER NOT NULL,
+      ctx_pct               REAL NOT NULL,
+      latency_ms            INTEGER NOT NULL,
+      stop_reason           TEXT,
+      created_at            INTEGER NOT NULL,
+      self_correction_count INTEGER NOT NULL DEFAULT 0,
+      repetition_score      REAL NOT NULL DEFAULT 0,
+      output_density        REAL NOT NULL DEFAULT 0
     )
   `);
   db.run(`
@@ -79,13 +82,24 @@ export function insertSession(db: Database, s: Session): void {
 
 export function insertTurn(db: Database, t: Turn): void {
   db.prepare(`
-    INSERT INTO turns (id, session_id, turn_index, input_tokens, output_tokens, cumulative_tokens, ctx_pct, latency_ms, stop_reason, created_at)
-    VALUES ($id, $sessionId, $turnIndex, $inputTokens, $outputTokens, $cumulativeTokens, $ctxPct, $latencyMs, $stopReason, $createdAt)
+    INSERT INTO turns (
+      id, session_id, turn_index, input_tokens, output_tokens, cumulative_tokens,
+      ctx_pct, latency_ms, stop_reason, created_at,
+      self_correction_count, repetition_score, output_density
+    )
+    VALUES (
+      $id, $sessionId, $turnIndex, $inputTokens, $outputTokens, $cumulativeTokens,
+      $ctxPct, $latencyMs, $stopReason, $createdAt,
+      $selfCorrectionCount, $repetitionScore, $outputDensity
+    )
   `).run({
     $id: t.id, $sessionId: t.sessionId, $turnIndex: t.turnIndex,
     $inputTokens: t.inputTokens, $outputTokens: t.outputTokens,
     $cumulativeTokens: t.cumulativeTokens, $ctxPct: t.ctxPct,
     $latencyMs: t.latencyMs, $stopReason: t.stopReason, $createdAt: t.createdAt,
+    $selfCorrectionCount: t.selfCorrectionCount,
+    $repetitionScore: t.repetitionScore,
+    $outputDensity: t.outputDensity,
   });
 }
 
@@ -103,10 +117,20 @@ export function updateSessionLastActive(db: Database, sessionId: string): void {
   db.prepare(`UPDATE sessions SET last_active_at = $now WHERE id = $id`).run({ $now: Date.now(), $id: sessionId });
 }
 
+export function closeSession(db: Database, sessionId: string): void {
+  db.prepare(`UPDATE sessions SET status = 'closed', last_active_at = $now WHERE id = $id`)
+    .run({ $now: Date.now(), $id: sessionId });
+}
+
 export function getSession(db: Database, sessionId: string): Session | undefined {
   return db.prepare(`SELECT * FROM sessions WHERE id = $id`).get({ $id: sessionId }) as Session | undefined;
 }
 
 export function getSessionTurns(db: Database, sessionId: string): Turn[] {
-  return db.prepare(`SELECT * FROM turns WHERE session_id = $sessionId ORDER BY turn_index ASC`).all({ $sessionId: sessionId }) as Turn[];
+  return db.prepare(`SELECT * FROM turns WHERE session_id = $sessionId ORDER BY turn_index ASC`)
+    .all({ $sessionId: sessionId }) as Turn[];
+}
+
+export function getAllSessions(db: Database): Session[] {
+  return db.prepare(`SELECT * FROM sessions ORDER BY created_at DESC`).all() as Session[];
 }

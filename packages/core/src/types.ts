@@ -27,7 +27,20 @@ export interface Turn {
   latencyMs: number;
   stopReason: string | null;
   createdAt: number;
+  // Quality proxy signals
+  selfCorrectionCount: number;  // occurrences of hedging/correction phrases
+  repetitionScore: number;       // 0–1, bigram overlap with previous turn output
+  outputDensity: number;         // output_tokens / input_tokens
 }
+
+// Phrases that indicate the model is revising or hedging mid-response
+export const SELF_CORRECTION_MARKERS = [
+  "actually,", "actually —", "let me revise", "let me rephrase",
+  "to clarify,", "to be more precise", "i should clarify",
+  "correction:", "more accurately,", "wait,", "i was wrong",
+  "let me reconsider", "upon reflection", "i misspoke",
+  "to be clear,", "i need to correct",
+] as const;
 
 export interface GCEvent {
   id: string;
