@@ -1,0 +1,63 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Bun
+bun.lockb
+*.bun
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# SQLite — never commit session data
+*.sqlite
+*.sqlite3
+*.db
+analysis/sessions/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Xcode
+apps/menu-bar/*.xcworkspace
+apps/menu-bar/DerivedData/
+apps/menu-bar/*.xcuserstate
+apps/menu-bar/xcuserdata/
+apps/menu-bar/.build/
+
+# Electron
+apps/*/release/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jupyter checkpoints
+.ipynb_checkpoints/
+
+# Coverage
+coverage/
+.nyc_output/

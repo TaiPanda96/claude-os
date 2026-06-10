@@ -1,0 +1,18 @@
+{
+  "name": "@claude-os/server",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Local Hono server — serves session data at localhost:7842.",
+  "type": "module",
+  "scripts": {
+    "dev": "bun run --watch src/index.ts",
+    "build": "bun build src/index.ts --outdir dist --target node"
+  },
+  "dependencies": {
+    "@claude-os/core": "workspace:*",
+    "hono": "^4.2.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}
