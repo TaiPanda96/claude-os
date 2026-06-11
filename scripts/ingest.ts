@@ -9,7 +9,6 @@
  *   bun run scripts/ingest.ts --file /path/to/x.jsonl  # one file
  *   bun run scripts/ingest.ts --stats                  # print DB summary only
  */
-
 import { program } from "@commander-js/extra-typings";
 import { parseArgs } from "util";
 import { Database } from "bun:sqlite";
