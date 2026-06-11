@@ -61,3 +61,4 @@ yarn-error.log*
 # Coverage
 coverage/
 .nyc_output/
+claude-os.sqlite*
