@@ -1,8 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { SessionList } from "./components/SessionList.js";
-import { EfficiencyCurve } from "./components/EfficiencyCurve.js";
-import { ContextMeter } from "./components/ContextMeter.js";
-import { SessionSummary } from "./components/SessionSummary.js";
+import { SessionTable } from "./components/SessionTable.js";
+import { DetailPanel } from "./components/DetailPanel.js";
 import { SessionRow, SessionDetail, GCEvent, SERVER } from "./types.js";
 
 const POLL_MS = 5_000;
@@ -21,19 +19,10 @@ export function App() {
       const data: SessionRow[] = await res.json();
       setSessions(data);
       setError(null);
-      // Auto-select the most recently active session with turns
-      if (!selectedId) {
-        const first = data.find((s) => s.current_ctx_pct !== null);
-        if (first) setSelectedId(first.id);
-      }
     } catch (e) {
-      setError(
-        e instanceof Error
-          ? e.message
-          : "Cannot reach server at localhost:7842",
-      );
+      setError(e instanceof Error ? e.message : "Cannot reach server at localhost:7842");
     }
-  }, [selectedId]);
+  }, []);
 
   const fetchDetail = useCallback(async (id: string) => {
     try {
@@ -44,21 +33,30 @@ export function App() {
       if (detailRes.ok) setDetail(await detailRes.json());
       if (eventsRes.ok) setGcEvents(await eventsRes.json());
     } catch {
-      // non-critical — session may have been deleted
+      // non-critical
     }
   }, []);
 
-  // Initial load + poll
   useEffect(() => {
     fetchSessions();
     const t = setInterval(fetchSessions, POLL_MS);
     return () => clearInterval(t);
   }, [fetchSessions]);
 
-  // Fetch detail when selection changes
   useEffect(() => {
     if (selectedId) fetchDetail(selectedId);
   }, [selectedId, fetchDetail]);
+
+  function handleSelect(id: string) {
+    // Toggle off if already selected
+    if (id === selectedId) {
+      setSelectedId(null);
+      setDetail(null);
+      setGcEvents([]);
+    } else {
+      setSelectedId(id);
+    }
+  }
 
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
 
@@ -67,56 +65,41 @@ export function App() {
       <div style={styles.error}>
         <div style={styles.errorIcon}>⚠</div>
         <div style={styles.errorText}>{error}</div>
-        <button style={styles.retryBtn} onClick={fetchSessions}>
-          Retry
-        </button>
+        <button style={styles.retryBtn} onClick={fetchSessions}>Retry</button>
       </div>
     );
   }
 
   return (
     <div style={styles.root}>
-      {/* Drag region for frameless window */}
+      {/* Title bar */}
       <div style={styles.titleBar}>
         <span style={styles.titleText}>Claude OS</span>
+        <span style={styles.titleMeta}>
+          {sessions.length} session{sessions.length !== 1 ? "s" : ""}
+        </span>
       </div>
 
-      <div style={styles.body}>
-        <SessionList
-          sessions={sessions}
-          selected={selectedId}
-          onSelect={setSelectedId}
+      {/* Primary view — sessions table, fills all available space */}
+      <SessionTable
+        sessions={sessions}
+        selected={selectedId}
+        onSelect={handleSelect}
+      />
+
+      {/* Detail panel — slides in from bottom on row click */}
+      {selected && detail && (
+        <DetailPanel
+          session={selected}
+          detail={detail}
+          gcEvents={gcEvents}
+          onClose={() => {
+            setSelectedId(null);
+            setDetail(null);
+            setGcEvents([]);
+          }}
         />
-
-        <div style={styles.main}>
-          {selected && (
-            <ContextMeter
-              ctxPct={selected.current_ctx_pct ?? 0}
-              turnCount={selected.turn_count}
-              model={selected.model}
-            />
-          )}
-          {detail && (
-            <SessionSummary turns={detail.turns} gcEvents={gcEvents} />
-          )}
-          {detail ? (
-            <EfficiencyCurve
-              turns={detail.turns}
-              sessionName={
-                detail.session.name ??
-                `unnamed (${detail.session.id.slice(0, 8)})`
-              }
-              gcEvents={gcEvents}
-            />
-          ) : (
-            <div style={styles.placeholder}>
-              {sessions.length === 0
-                ? "No sessions — run bun run ingest"
-                : "Select a session"}
-            </div>
-          )}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -128,16 +111,17 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100vh",
     background: "#0d0d0f",
     userSelect: "none",
+    overflow: "hidden",
   },
   titleBar: {
     height: 36,
     display: "flex",
     alignItems: "center",
-    paddingLeft: 80, // space for traffic lights
-    paddingRight: 16,
+    paddingLeft: 80,
+    paddingRight: 20,
     borderBottom: "1px solid #2c2c2e",
     background: "#111113",
-    // @ts-ignore — Electron-specific CSS property
+    // @ts-ignore
     WebkitAppRegion: "drag",
     flexShrink: 0,
   },
@@ -147,24 +131,10 @@ const styles: Record<string, React.CSSProperties> = {
     color: "#636366",
     letterSpacing: "0.04em",
   },
-  body: {
-    flex: 1,
-    display: "flex",
-    overflow: "hidden",
-  },
-  main: {
-    flex: 1,
-    display: "flex",
-    flexDirection: "column",
-    overflow: "hidden",
-  },
-  placeholder: {
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: "#48484a",
-    fontSize: 13,
+  titleMeta: {
+    marginLeft: "auto",
+    fontSize: 11,
+    color: "#3a3a3c",
     fontFamily: "monospace",
   },
   error: {
@@ -175,15 +145,8 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: "center",
     gap: 12,
   },
-  errorIcon: {
-    fontSize: 32,
-    color: "#ff3b30",
-  },
-  errorText: {
-    color: "#636366",
-    fontSize: 13,
-    fontFamily: "monospace",
-  },
+  errorIcon: { fontSize: 32, color: "#ff3b30" },
+  errorText: { color: "#636366", fontSize: 13, fontFamily: "monospace" },
   retryBtn: {
     marginTop: 4,
     padding: "6px 16px",
