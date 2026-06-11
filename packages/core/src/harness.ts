@@ -12,15 +12,23 @@
  * forcing context to accumulate naturally.
  */
 
+import { config as loadEnv } from "dotenv";
 import { parseArgs } from "util";
+import * as path from "node:path";
+import { fileURLToPath } from "node:url";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+loadEnv({ path: path.resolve(__dirname, "../.env") });
 import { createInstrumentedClient } from "./wrapper.js";
 
 const { values } = parseArgs({
   args: Bun.argv.slice(2),
   options: {
-    name:  { type: "string", default: `session-${Date.now()}` },
+    name: { type: "string", default: `session-${Date.now()}` },
     turns: { type: "string", default: "15" },
-    topic: { type: "string", default: "designing a TypeScript monorepo with shared packages" },
+    topic: {
+      type: "string",
+      default: "designing a TypeScript monorepo with shared packages",
+    },
     model: { type: "string", default: "claude-haiku-4-5-20251001" },
   },
   strict: true,
@@ -56,15 +64,15 @@ const PROMPT_TEMPLATES = [
 ];
 
 function gcLabel(ctxPct: number): string {
-  if (ctxPct >= 0.80) return "\x1b[31mHard GC\x1b[0m";
-  if (ctxPct >= 0.60) return "\x1b[33mSoft GC\x1b[0m";
+  if (ctxPct >= 0.8) return "\x1b[31mHard GC\x1b[0m";
+  if (ctxPct >= 0.6) return "\x1b[33mSoft GC\x1b[0m";
   return "\x1b[32mClean\x1b[0m  ";
 }
 
 function bar(pct: number, width = 30): string {
   const filled = Math.round(pct * width);
   const empty = width - filled;
-  const color = pct >= 0.80 ? "\x1b[31m" : pct >= 0.60 ? "\x1b[33m" : "\x1b[32m";
+  const color = pct >= 0.8 ? "\x1b[31m" : pct >= 0.6 ? "\x1b[33m" : "\x1b[32m";
   return `${color}${"█".repeat(filled)}\x1b[90m${"░".repeat(empty)}\x1b[0m`;
 }
 
@@ -73,7 +81,10 @@ const messages: Array<{ role: "user" | "assistant"; content: string }> = [];
 const client = createInstrumentedClient(undefined, {
   sessionName: SESSION_NAME,
   onGCStateChange: (state, ctxPct) => {
-    const label = state === "hard_gc" ? "\x1b[31m⚠ HARD GC\x1b[0m" : "\x1b[33m⚡ SOFT GC\x1b[0m";
+    const label =
+      state === "hard_gc"
+        ? "\x1b[31m⚠ HARD GC\x1b[0m"
+        : "\x1b[33m⚡ SOFT GC\x1b[0m";
     console.log(`\n  ${label} — context at ${(ctxPct * 100).toFixed(1)}%\n`);
   },
 });
@@ -83,16 +94,20 @@ console.log(`Session:  ${SESSION_NAME}`);
 console.log(`Model:    ${MODEL}`);
 console.log(`Turns:    ${TURNS}`);
 console.log(`Topic:    ${TOPIC}`);
-console.log(`DB:       ${process.env.CLAUDE_OS_DB_PATH ?? "claude-os.sqlite"}\n`);
+console.log(
+  `DB:       ${process.env.CLAUDE_OS_DB_PATH ?? "claude-os.sqlite"}\n`,
+);
 console.log("─".repeat(80));
 console.log(
   `${"Turn".padEnd(5)} ${"In".padStart(7)} ${"Out".padStart(7)} ${"Cumul".padStart(9)} ` +
-  `${"Ctx%".padStart(6)} ${"ms".padStart(6)} ${"SC".padStart(3)} ${"Rep".padStart(5)}  ${"State"}`
+    `${"Ctx%".padStart(6)} ${"ms".padStart(6)} ${"SC".padStart(3)} ${"Rep".padStart(5)}  ${"State"}`,
 );
 console.log("─".repeat(80));
 
 for (let i = 0; i < TURNS; i++) {
-  const prompt = PROMPT_TEMPLATES[i % PROMPT_TEMPLATES.length] ?? `Continue on turn ${i + 1}.`;
+  const prompt =
+    PROMPT_TEMPLATES[i % PROMPT_TEMPLATES.length] ??
+    `Continue on turn ${i + 1}.`;
   messages.push({ role: "user", content: prompt });
 
   const response = await client.messages.create({
@@ -115,34 +130,42 @@ for (let i = 0; i < TURNS; i++) {
   const { Database } = await import("bun:sqlite");
   const dbPath = process.env.CLAUDE_OS_DB_PATH ?? "claude-os.sqlite";
   const db = new Database(dbPath, { readonly: true });
-  const row = db.prepare(
-    `SELECT self_correction_count, repetition_score FROM turns WHERE session_id = $sid ORDER BY turn_index DESC LIMIT 1`
-  ).get({ $sid: client.sessionId }) as { self_correction_count: number; repetition_score: number } | undefined;
+  const row = db
+    .prepare(
+      `SELECT self_correction_count, repetition_score FROM turns WHERE session_id = $sid ORDER BY turn_index DESC LIMIT 1`,
+    )
+    .get({ $sid: client.sessionId }) as
+    | { self_correction_count: number; repetition_score: number }
+    | undefined;
   db.close();
 
   const sc = row?.self_correction_count ?? 0;
   const rep = row?.repetition_score ?? 0;
-  const cumul = health.ctxPct * (200_000);
+  const cumul = health.ctxPct * 200_000;
 
   console.log(
     `${String(i + 1).padEnd(5)} ` +
-    `${String(input_tokens).padStart(7)} ` +
-    `${String(output_tokens).padStart(7)} ` +
-    `${String(Math.round(cumul)).padStart(9)} ` +
-    `${(health.ctxPct * 100).toFixed(1).padStart(5)}% ` +
-    `${String(response.usage.input_tokens > 0 ? "—" : "—").padStart(6)} ` +
-    `${String(sc).padStart(3)} ` +
-    `${rep.toFixed(2).padStart(5)}  ` +
-    `${gcLabel(health.ctxPct)}`
+      `${String(input_tokens).padStart(7)} ` +
+      `${String(output_tokens).padStart(7)} ` +
+      `${String(Math.round(cumul)).padStart(9)} ` +
+      `${(health.ctxPct * 100).toFixed(1).padStart(5)}% ` +
+      `${String(response.usage.input_tokens > 0 ? "—" : "—").padStart(6)} ` +
+      `${String(sc).padStart(3)} ` +
+      `${rep.toFixed(2).padStart(5)}  ` +
+      `${gcLabel(health.ctxPct)}`,
   );
 }
 
 console.log("─".repeat(80));
 const health = client.getHealth();
 console.log(`\n\x1b[1mSession complete\x1b[0m`);
-console.log(`Context:  ${bar(health.ctxPct)} ${(health.ctxPct * 100).toFixed(1)}%`);
+console.log(
+  `Context:  ${bar(health.ctxPct)} ${(health.ctxPct * 100).toFixed(1)}%`,
+);
 console.log(`Turns:    ${health.turnCount}`);
 console.log(`GC state: ${gcLabel(health.ctxPct)}`);
-console.log(`\nRun the notebook to plot the efficiency curve:\n  cd analysis && jupyter notebook efficiency_curve.ipynb\n`);
+console.log(
+  `\nRun the notebook to plot the efficiency curve:\n  cd analysis && jupyter notebook efficiency_curve.ipynb\n`,
+);
 
 client.close();

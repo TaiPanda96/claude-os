@@ -1,8 +1,11 @@
-import { Database } from "bun:sqlite";
 import { join } from "path";
+import { Database } from "bun:sqlite";
 import type { Session, Turn, GCEvent } from "./types.js";
 
-const DB_PATH = process.env.CLAUDE_OS_DB_PATH ?? join(process.cwd(), "claude-os.sqlite");
+export type { Database };
+
+const DB_PATH =
+  process.env.CLAUDE_OS_DB_PATH ?? join(process.cwd(), "claude-os.sqlite");
 
 let _db: Database | null = null;
 
@@ -65,23 +68,36 @@ function migrate(db: Database): void {
     )
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_gc_events_session ON gc_events(session_id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_outcomes_session ON outcomes(session_id)`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_gc_events_session ON gc_events(session_id)`,
+  );
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_outcomes_session ON outcomes(session_id)`,
+  );
 }
 
 export function insertSession(db: Database, s: Session): void {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO sessions (id, name, model, ctx_window, created_at, last_active_at, status, outcome_status, forked_from)
     VALUES ($id, $name, $model, $ctxWindow, $createdAt, $lastActiveAt, $status, $outcomeStatus, $forkedFrom)
-  `).run({
-    $id: s.id, $name: s.name, $model: s.model, $ctxWindow: s.ctxWindow,
-    $createdAt: s.createdAt, $lastActiveAt: s.lastActiveAt,
-    $status: s.status, $outcomeStatus: s.outcomeStatus, $forkedFrom: s.forkedFrom,
+  `,
+  ).run({
+    $id: s.id,
+    $name: s.name,
+    $model: s.model,
+    $ctxWindow: s.ctxWindow,
+    $createdAt: s.createdAt,
+    $lastActiveAt: s.lastActiveAt,
+    $status: s.status,
+    $outcomeStatus: s.outcomeStatus,
+    $forkedFrom: s.forkedFrom,
   });
 }
 
 export function insertTurn(db: Database, t: Turn): void {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO turns (
       id, session_id, turn_index, input_tokens, output_tokens, cumulative_tokens,
       ctx_pct, latency_ms, stop_reason, created_at,
@@ -92,11 +108,18 @@ export function insertTurn(db: Database, t: Turn): void {
       $ctxPct, $latencyMs, $stopReason, $createdAt,
       $selfCorrectionCount, $repetitionScore, $outputDensity
     )
-  `).run({
-    $id: t.id, $sessionId: t.sessionId, $turnIndex: t.turnIndex,
-    $inputTokens: t.inputTokens, $outputTokens: t.outputTokens,
-    $cumulativeTokens: t.cumulativeTokens, $ctxPct: t.ctxPct,
-    $latencyMs: t.latencyMs, $stopReason: t.stopReason, $createdAt: t.createdAt,
+  `,
+  ).run({
+    $id: t.id,
+    $sessionId: t.sessionId,
+    $turnIndex: t.turnIndex,
+    $inputTokens: t.inputTokens,
+    $outputTokens: t.outputTokens,
+    $cumulativeTokens: t.cumulativeTokens,
+    $ctxPct: t.ctxPct,
+    $latencyMs: t.latencyMs,
+    $stopReason: t.stopReason,
+    $createdAt: t.createdAt,
     $selfCorrectionCount: t.selfCorrectionCount,
     $repetitionScore: t.repetitionScore,
     $outputDensity: t.outputDensity,
@@ -104,54 +127,88 @@ export function insertTurn(db: Database, t: Turn): void {
 }
 
 export function insertGCEvent(db: Database, e: GCEvent): void {
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO gc_events (id, session_id, gc_type, ctx_pct_at_trigger, created_at)
     VALUES ($id, $sessionId, $gcType, $ctxPctAtTrigger, $createdAt)
-  `).run({
-    $id: e.id, $sessionId: e.sessionId, $gcType: e.gcType,
-    $ctxPctAtTrigger: e.ctxPctAtTrigger, $createdAt: e.createdAt,
+  `,
+  ).run({
+    $id: e.id,
+    $sessionId: e.sessionId,
+    $gcType: e.gcType,
+    $ctxPctAtTrigger: e.ctxPctAtTrigger,
+    $createdAt: e.createdAt,
   });
 }
 
 export function updateSessionLastActive(db: Database, sessionId: string): void {
-  db.prepare(`UPDATE sessions SET last_active_at = $now WHERE id = $id`).run({ $now: Date.now(), $id: sessionId });
+  db.prepare(`UPDATE sessions SET last_active_at = $now WHERE id = $id`).run({
+    $now: Date.now(),
+    $id: sessionId,
+  });
 }
 
 export function closeSession(db: Database, sessionId: string): void {
-  db.prepare(`UPDATE sessions SET status = 'closed', last_active_at = $now WHERE id = $id`)
-    .run({ $now: Date.now(), $id: sessionId });
+  db.prepare(
+    `UPDATE sessions SET status = 'closed', last_active_at = $now WHERE id = $id`,
+  ).run({ $now: Date.now(), $id: sessionId });
 }
 
 // Rows come back snake_cased from SQLite; map to the camelCase domain types.
 function rowToSession(r: any): Session {
   return {
-    id: r.id, name: r.name, model: r.model, ctxWindow: r.ctx_window,
-    createdAt: r.created_at, lastActiveAt: r.last_active_at,
-    status: r.status, outcomeStatus: r.outcome_status, forkedFrom: r.forked_from,
+    id: r.id,
+    name: r.name,
+    model: r.model,
+    ctxWindow: r.ctx_window,
+    createdAt: r.created_at,
+    lastActiveAt: r.last_active_at,
+    status: r.status,
+    outcomeStatus: r.outcome_status,
+    forkedFrom: r.forked_from,
   };
 }
 
 function rowToTurn(r: any): Turn {
   return {
-    id: r.id, sessionId: r.session_id, turnIndex: r.turn_index,
-    inputTokens: r.input_tokens, outputTokens: r.output_tokens,
-    cumulativeTokens: r.cumulative_tokens, ctxPct: r.ctx_pct,
-    latencyMs: r.latency_ms, stopReason: r.stop_reason, createdAt: r.created_at,
+    id: r.id,
+    sessionId: r.session_id,
+    turnIndex: r.turn_index,
+    inputTokens: r.input_tokens,
+    outputTokens: r.output_tokens,
+    cumulativeTokens: r.cumulative_tokens,
+    ctxPct: r.ctx_pct,
+    latencyMs: r.latency_ms,
+    stopReason: r.stop_reason,
+    createdAt: r.created_at,
     selfCorrectionCount: r.self_correction_count,
-    repetitionScore: r.repetition_score, outputDensity: r.output_density,
+    repetitionScore: r.repetition_score,
+    outputDensity: r.output_density,
   };
 }
 
-export function getSession(db: Database, sessionId: string): Session | undefined {
-  const r = db.prepare(`SELECT * FROM sessions WHERE id = $id`).get({ $id: sessionId });
+export function getSession(
+  db: Database,
+  sessionId: string,
+): Session | undefined {
+  const r = db
+    .prepare(`SELECT * FROM sessions WHERE id = $id`)
+    .get({ $id: sessionId });
   return r ? rowToSession(r) : undefined;
 }
 
 export function getSessionTurns(db: Database, sessionId: string): Turn[] {
-  return db.prepare(`SELECT * FROM turns WHERE session_id = $sessionId ORDER BY turn_index ASC`)
-    .all({ $sessionId: sessionId }).map(rowToTurn);
+  return db
+    .prepare(
+      `SELECT * FROM turns WHERE session_id = $sessionId ORDER BY turn_index ASC`,
+    )
+    .all({ $sessionId: sessionId })
+    .map(rowToTurn);
 }
 
 export function getAllSessions(db: Database): Session[] {
-  return db.prepare(`SELECT * FROM sessions ORDER BY created_at DESC`).all().map(rowToSession);
+  return db
+    .prepare(`SELECT * FROM sessions ORDER BY created_at DESC`)
+    .all()
+    .map(rowToSession);
 }

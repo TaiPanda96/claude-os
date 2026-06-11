@@ -1,3 +1,5 @@
+export type { Database } from "bun:sqlite";
+
 export type GCState = "clean" | "soft_gc" | "hard_gc" | "aged";
 
 export type SessionStatus = "active" | "closed" | "archived";
@@ -28,18 +30,29 @@ export interface Turn {
   stopReason: string | null;
   createdAt: number;
   // Quality proxy signals
-  selfCorrectionCount: number;  // occurrences of hedging/correction phrases
-  repetitionScore: number;       // 0–1, bigram overlap with previous turn output
-  outputDensity: number;         // output_tokens / input_tokens
+  selfCorrectionCount: number; // occurrences of hedging/correction phrases
+  repetitionScore: number; // 0–1, bigram overlap with previous turn output
+  outputDensity: number; // output_tokens / input_tokens
 }
 
 // Phrases that indicate the model is revising or hedging mid-response
 export const SELF_CORRECTION_MARKERS = [
-  "actually,", "actually —", "let me revise", "let me rephrase",
-  "to clarify,", "to be more precise", "i should clarify",
-  "correction:", "more accurately,", "wait,", "i was wrong",
-  "let me reconsider", "upon reflection", "i misspoke",
-  "to be clear,", "i need to correct",
+  "actually,",
+  "actually —",
+  "let me revise",
+  "let me rephrase",
+  "to clarify,",
+  "to be more precise",
+  "i should clarify",
+  "correction:",
+  "more accurately,",
+  "wait,",
+  "i was wrong",
+  "let me reconsider",
+  "upon reflection",
+  "i misspoke",
+  "to be clear,",
+  "i need to correct",
 ] as const;
 
 export interface GCEvent {
@@ -76,9 +89,37 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
 };
 
 export const GC_THRESHOLDS = {
-  soft: 0.60,
-  hard: 0.80,
+  soft: 0.6,
+  hard: 0.8,
 } as const;
+
+export interface AssistantRecord {
+  type: "assistant";
+  uuid: string;
+  parentUuid?: string;
+  sessionId: string;
+  timestamp: string;
+  cwd: string;
+  message: {
+    model: string;
+    stop_reason: string | null;
+    content: Array<{ type: string; text?: string }>;
+    usage: {
+      input_tokens: number;
+      output_tokens: number;
+      cache_read_input_tokens?: number;
+      cache_creation_input_tokens?: number;
+    };
+  };
+}
+
+export interface UserRecord {
+  type: "user";
+  uuid: string;
+  sessionId: string;
+  timestamp: string;
+  message: { content: string | Array<{ type: string; text?: string }> };
+}
 
 export function computeGCState(ctxPct: number): GCState {
   if (ctxPct >= GC_THRESHOLDS.hard) return "hard_gc";
