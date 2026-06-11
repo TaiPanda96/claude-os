@@ -1,8 +1,9 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "module": "ESNext",
+    "module": "preserve",
     "moduleResolution": "bundler",
+    "types": ["bun"],
     "strict": true,
     "exactOptionalPropertyTypes": true,
     "noUncheckedIndexedAccess": true,

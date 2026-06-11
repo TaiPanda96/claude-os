@@ -1,9 +1,6 @@
 {
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
-    "module": "node16",
-    "moduleResolution": "node16",
-    "types": ["bun"],
     "baseUrl": ".",
     "paths": {
       "@claude-os/core": ["packages/core/src/index.ts"],

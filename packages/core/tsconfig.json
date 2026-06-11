@@ -3,9 +3,6 @@
   "compilerOptions": {
     "outDir": "./dist",
     "rootDir": "./src",
-    "module": "node16",
-    "moduleResolution": "node16",
-    "types": ["bun"],
     "noEmit": true
   },
   "include": ["src"]
