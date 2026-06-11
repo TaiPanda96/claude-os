@@ -88,7 +88,7 @@ const tooltipValue: React.CSSProperties = { color: "#f2f2f7" };
 
 type Props = {
   turns: Turn[];
-  sessionName?: string;
+  sessionName?: string | undefined;
   gcEvents?: GCEvent[];
 };
 
@@ -175,7 +175,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
               if (isFirst) seen.add(ev.gc_type);
               return (
                 <ReferenceLine key={ev.id} x={x} stroke={color} strokeWidth={1} strokeOpacity={0.35}
-                  label={isFirst ? { value: "↓", position: "top", fill: color, fontSize: 10 } : undefined} />
+                  {...(isFirst ? { label: { value: "↓", position: "top" as const, fill: color, fontSize: 10 } } : {})} />
               );
             });
           })()}

@@ -3,6 +3,7 @@ export interface SessionRow {
   name: string | null;
   model: string;
   status: string;
+  ctx_window: number;
   current_ctx_pct: number | null;
   turn_count: number;
   last_active_at: number;
