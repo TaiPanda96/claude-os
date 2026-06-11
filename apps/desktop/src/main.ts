@@ -1,4 +1,11 @@
-import { app, Tray, Menu, nativeImage, Notification } from "electron";
+import {
+  app,
+  Tray,
+  Menu,
+  nativeImage,
+  Notification,
+  BrowserWindow,
+} from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -52,6 +59,17 @@ function startServer(): Promise<void> {
     serverProcess = spawn("bun", ["run", SERVER_ENTRY], {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+        PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}`,
+      },
+    });
+
+    serverProcess.on("error", (err) => {
+      clearInterval(ready);
+      reject(
+        new Error(`Failed to spawn bun: ${err.message}. Is bun installed?`),
+      );
     });
 
     serverProcess.stderr?.on("data", (d) =>
@@ -104,8 +122,37 @@ async function fetchMostActiveSession(): Promise<SessionRow | null> {
 // ── App bootstrap ─────────────────────────────────────────────────────────────
 
 let tray: Tray | null = null;
+let win: BrowserWindow | null = null;
 let lastGCState: GCState = "clean";
 let pollTimer: ReturnType<typeof setInterval> | null = null;
+
+const IS_DEV =
+  process.argv.includes("--dev") || process.env.NODE_ENV === "development";
+const RENDERER_URL = IS_DEV
+  ? "http://localhost:5173"
+  : `file://${path.join(__dirname, "../renderer/index.html")}`;
+
+function createWindow() {
+  if (win && !win.isDestroyed()) {
+    win.focus();
+    return;
+  }
+  win = new BrowserWindow({
+    width: 960,
+    height: 640,
+    minWidth: 720,
+    minHeight: 480,
+    titleBarStyle: "hiddenInset",
+    backgroundColor: "#0d0d0f",
+    webPreferences: { contextIsolation: true },
+    show: false,
+  });
+  win.loadURL(RENDERER_URL);
+  win.once("ready-to-show", () => win?.show());
+  win.on("closed", () => {
+    win = null;
+  });
+}
 
 function buildContextMenu(
   session: SessionRow | null,
@@ -125,9 +172,8 @@ function buildContextMenu(
     },
     { type: "separator" },
     {
-      label: "Activity Monitor",
-      enabled: false, // Phase 2
-      click: () => {},
+      label: "Open Activity Monitor",
+      click: createWindow,
     },
     { type: "separator" },
     { label: "Quit Claude OS", click: () => app.quit() },
@@ -168,17 +214,20 @@ async function poll() {
 app.whenReady().then(async () => {
   app.dock?.hide(); // menu bar only — no dock icon
 
-  try {
-    await startServer();
-  } catch (err) {
-    console.error("Failed to start server:", err);
-    app.quit();
-    return;
+  if (!IS_DEV) {
+    try {
+      await startServer();
+    } catch (err) {
+      console.error("Failed to start server:", err);
+      app.quit();
+      return;
+    }
   }
 
   tray = new Tray(makeTrayIcon("clean"));
   tray.setToolTip("Claude OS — starting…");
   tray.setContextMenu(buildContextMenu(null, "clean", 0));
+  tray.on("click", createWindow);
 
   await poll();
   pollTimer = setInterval(poll, POLL_INTERVAL_MS);

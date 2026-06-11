@@ -10,7 +10,7 @@ import { getDb, getSession, getSessionTurns } from "@claude-os/core";
 const app = new Hono();
 const PORT = 7842;
 
-app.use("/*", cors({ origin: ["http://localhost:3000", "app://claude-os"] }));
+app.use("/*", cors({ origin: ["http://localhost:3000", "http://localhost:5173", "app://claude-os"] }));
 
 app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
 
@@ -50,5 +50,4 @@ app.get("/sessions/:id/gc-events", (c) => {
   return c.json(events);
 });
 
-console.log(`Claude OS server running at http://localhost:${PORT}`);
 export default { port: PORT, fetch: app.fetch };
