@@ -1,4 +1,4 @@
-import { Database } from "../db";
+import { Database } from "../db.js";
 
 export function initializeSchemas(db: Database) {
   db.run("PRAGMA journal_mode = WAL");

@@ -1,4 +1,4 @@
-import { bigrams } from "./bigrams";
+import { bigrams } from "./bigrams.js";
 
 export function bigramOverlap(a: string, b: string): number {
   if (!a || !b) return 0;

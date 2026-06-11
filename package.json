@@ -2,6 +2,7 @@
   "name": "claude-os",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "A macOS activity monitor for Claude sessions — real-time token economics, context window health, and GC state tracking.",
   "workspaces": [
     "packages/*"

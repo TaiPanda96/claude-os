@@ -6,9 +6,9 @@ import {
   UserRecord,
   Database,
   computeGCState,
-} from "../types";
-import { bigramOverlap } from "../utils/bigram-overlap";
-import { countSelfCorrections } from "../utils/count-self-corrections";
+} from "../types.js";
+import { bigramOverlap } from "../utils/bigram-overlap.js";
+import { countSelfCorrections } from "../utils/count-self-corrections.js";
 
 export interface IngestResult {
   /** Session number denotes the given session ingested */
@@ -121,8 +121,8 @@ export function ingestJsonLFile(
 
       // Output text
       const outputText = turn.message.content
-        .filter((b) => b.type === "text")
-        .map((b) => b.text ?? "")
+        .filter((b: { type: string }) => b.type === "text")
+        .map((b: { text?: string }) => b.text ?? "")
         .join("\n");
 
       const selfCorrectionCount = countSelfCorrections(outputText);

@@ -18,8 +18,8 @@ import { homedir } from "os";
 import {
   ingestJsonLFile,
   printIngestStats,
-} from "@claude-os/core/ingest/ingest-jsonl-file";
-import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas";
+} from "@claude-os/core/ingest/ingest-jsonl-file.js";
+import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
 
 const PROJECTS = join(homedir(), ".claude", "projects");
 
