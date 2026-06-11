@@ -57,6 +57,12 @@ const tooltipStyle: React.CSSProperties = {
   fontFamily: "monospace",
 };
 
+type Props = {
+  turns: Turn[];
+  sessionName?: string;
+  gcEvents?: GCEvent[];
+};
+
 export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
   const data = useMemo(() => computeQuality(turns), [turns]);
 
@@ -159,12 +165,16 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
                   stroke={color}
                   strokeWidth={1}
                   strokeOpacity={0.35}
-                  label={isFirst ? {
-                    value: "↓",
-                    position: "top",
-                    fill: color,
-                    fontSize: 10,
-                  } : undefined}
+                  label={
+                    isFirst
+                      ? {
+                          value: "↓",
+                          position: "top",
+                          fill: color,
+                          fontSize: 10,
+                        }
+                      : undefined
+                  }
                 />
               );
             });

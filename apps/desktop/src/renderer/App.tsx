@@ -102,7 +102,10 @@ export function App() {
           {detail ? (
             <EfficiencyCurve
               turns={detail.turns}
-              sessionName={detail.session.name}
+              sessionName={
+                detail.session.name ??
+                `unnamed (${detail.session.id.slice(0, 8)})`
+              }
               gcEvents={gcEvents}
             />
           ) : (
