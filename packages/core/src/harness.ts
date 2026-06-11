@@ -30,6 +30,8 @@ const { values } = parseArgs({
       default: "designing a TypeScript monorepo with shared packages",
     },
     model: { type: "string", default: "claude-haiku-4-5-20251001" },
+    apiKey: { type: "string" },
+    "api-key": { type: "string" },
   },
   strict: true,
 });

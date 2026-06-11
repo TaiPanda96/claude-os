@@ -34,7 +34,8 @@ program
     "Actually enqueue child scrape jobs (default: dry-run)",
   )
   .option("--out <path>", "Write the JSON summary to this path")
-  .action(async (opts: {}) => {
+  .option("--stats", "Print DB summary only")
+  .action(async (opts: { stats?: boolean }) => {
     // ── Args ────────────────────────────────────────────────────────────────────
     const { values } = parseArgs({
       args: Bun.argv.slice(2),
@@ -51,6 +52,7 @@ program
       strict: true,
     });
 
+    const stats = opts.stats || values.stats;
     // Setup DB
     const DB_PATH = values.db ?? join(import.meta.dir, "../claude-os.sqlite");
     // ── DB setup ─────────────────────────────────────────────────────────────────
@@ -58,7 +60,7 @@ program
     initializeSchemas(db);
 
     // ── Main ──────────────────────────────────────────────────────────────────────
-    if (values.stats) {
+    if (stats) {
       printIngestStats(db, { databasePath: DB_PATH });
       process.exit(0);
     }
