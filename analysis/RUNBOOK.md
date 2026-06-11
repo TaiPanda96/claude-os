@@ -56,7 +56,7 @@ console.log(db.prepare('SELECT COUNT(*) as n FROM turns').get());
 ### 2. Export session CSVs
 
 ```bash
-bun run --cwd packages/core export
+bun run scripts/export.ts
 # CSVs land in analysis/sessions/
 ```
 
@@ -162,7 +162,6 @@ Output density drops 41% entering soft GC and 60% at hard GC relative to clean-s
 ---
 
 ## Next steps (Phase 1+)
-
 - **Phase 1 — Menu bar sprite:** Poll `claude-os.sqlite` every 5s and surface `ctx_pct` + `gc_state` as a macOS menu bar icon with colour coding (green / amber / red).
 - **Phase 2 — Activity Monitor window:** Full session detail view via the Hono server at `localhost:7842`, consumed by an Electron shell.
 - **Phase 3 — Proactive compaction:** Trigger a compaction suggestion when the hook detects `gc_state = hard_gc` or when the rolling slope turns negative for 3+ consecutive turns.

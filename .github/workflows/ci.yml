@@ -18,6 +18,7 @@ jobs:
       - run: bun install
       - run: bun run --cwd packages/core typecheck
       - run: bun run --cwd packages/server typecheck
+      - run: bun run tsc --noEmit -p scripts/tsconfig.json
 
   lint:
     name: Lint

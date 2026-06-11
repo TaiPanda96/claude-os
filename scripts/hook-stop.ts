@@ -10,9 +10,9 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file.js";
-import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
-import { findJsonlForSession } from "@claude-os/core/ingest/project-discovery.js";
+import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file";
+import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas";
+import { findJsonlForSession } from "@claude-os/core/ingest/project-discovery";
 
 const DB_PATH =
   process.env.CLAUDE_OS_DB_PATH ?? join(import.meta.dir, "../claude-os.sqlite");
