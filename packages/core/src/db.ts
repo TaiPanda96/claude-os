@@ -122,15 +122,36 @@ export function closeSession(db: Database, sessionId: string): void {
     .run({ $now: Date.now(), $id: sessionId });
 }
 
+// Rows come back snake_cased from SQLite; map to the camelCase domain types.
+function rowToSession(r: any): Session {
+  return {
+    id: r.id, name: r.name, model: r.model, ctxWindow: r.ctx_window,
+    createdAt: r.created_at, lastActiveAt: r.last_active_at,
+    status: r.status, outcomeStatus: r.outcome_status, forkedFrom: r.forked_from,
+  };
+}
+
+function rowToTurn(r: any): Turn {
+  return {
+    id: r.id, sessionId: r.session_id, turnIndex: r.turn_index,
+    inputTokens: r.input_tokens, outputTokens: r.output_tokens,
+    cumulativeTokens: r.cumulative_tokens, ctxPct: r.ctx_pct,
+    latencyMs: r.latency_ms, stopReason: r.stop_reason, createdAt: r.created_at,
+    selfCorrectionCount: r.self_correction_count,
+    repetitionScore: r.repetition_score, outputDensity: r.output_density,
+  };
+}
+
 export function getSession(db: Database, sessionId: string): Session | undefined {
-  return db.prepare(`SELECT * FROM sessions WHERE id = $id`).get({ $id: sessionId }) as Session | undefined;
+  const r = db.prepare(`SELECT * FROM sessions WHERE id = $id`).get({ $id: sessionId });
+  return r ? rowToSession(r) : undefined;
 }
 
 export function getSessionTurns(db: Database, sessionId: string): Turn[] {
   return db.prepare(`SELECT * FROM turns WHERE session_id = $sessionId ORDER BY turn_index ASC`)
-    .all({ $sessionId: sessionId }) as Turn[];
+    .all({ $sessionId: sessionId }).map(rowToTurn);
 }
 
 export function getAllSessions(db: Database): Session[] {
-  return db.prepare(`SELECT * FROM sessions ORDER BY created_at DESC`).all() as Session[];
+  return db.prepare(`SELECT * FROM sessions ORDER BY created_at DESC`).all().map(rowToSession);
 }
