@@ -54,6 +54,18 @@ export function SessionSummary({ turns, gcEvents }: Props) {
       color: trendColor,
       sub: "last 10 turns",
     },
+    {
+      label: "Marginal density",
+      value: `${stats.avgMarginalDensity}x`,
+      color: stats.avgMarginalDensity > 50 ? GC_COLOR.hard_gc : stats.avgMarginalDensity > 20 ? GC_COLOR.soft_gc : GC_COLOR.clean,
+      sub: "avg new ctx / output tok",
+    },
+    {
+      label: "Work efficiency",
+      value: stats.currentWorkEfficiency.toLocaleString(),
+      color: "#0a84ff",
+      sub: "tokens per artifact",
+    },
   ];
 
   return (

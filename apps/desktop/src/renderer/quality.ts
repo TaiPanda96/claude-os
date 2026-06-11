@@ -1,11 +1,20 @@
 import { Turn } from "./types.js";
 
+export type Metric = "quality" | "marginalDensity" | "workEfficiency";
+
 export interface ChartPoint {
   turnIndex: number;
-  ctxPct: number;   // already in percentage (0–100)
-  quality: number;  // 0–1
+  ctxPct: number;          // percentage (0–100)
   gcState: string;
+  // quality proxy (0–1 normalized)
+  quality: number;
   outputDensity: number;
+  // marginal density: new context tokens introduced / output tokens (raw, then normalized)
+  marginalDensityRaw: number;
+  marginalDensity: number; // 0–1 normalized
+  // work efficiency: cumulative tokens consumed / cumulative high-output turns (raw, then normalized)
+  workEfficiencyRaw: number;  // tokens-per-artifact at this turn
+  workEfficiency: number;     // 0–1 normalized (higher = worse efficiency)
 }
 
 function normalize(values: number[]): number[] {
@@ -20,51 +29,93 @@ function normalize(values: number[]): number[] {
 export function computeQuality(turns: Turn[]): ChartPoint[] {
   if (turns.length === 0) return [];
 
+  // ── Quality proxy ────────────────────────────────────────────────────────
   const densityN = normalize(turns.map((t) => t.outputDensity ?? 0));
-  const scN = normalize(turns.map((t) => t.selfCorrectionCount ?? 0));
-  const repN = normalize(turns.map((t) => t.repetitionScore ?? 0));
+  const scN      = normalize(turns.map((t) => t.selfCorrectionCount ?? 0));
+  const repN     = normalize(turns.map((t) => t.repetitionScore ?? 0));
+
+  // ── Marginal density ─────────────────────────────────────────────────────
+  // effectiveInput[i] = cumulativeTokens[i] - outputTokens[i]
+  // newContextTokens[i] = effectiveInput[i] - effectiveInput[i-1]
+  // marginalDensityRaw[i] = newContextTokens[i] / outputTokens[i]
+  const effectiveInputs = turns.map((t) => t.cumulativeTokens - t.outputTokens);
+  const marginalRaw = turns.map((t, i) => {
+    const prev = i === 0 ? 0 : effectiveInputs[i - 1]!;
+    const newCtx = Math.max(0, effectiveInputs[i]! - prev);
+    return t.outputTokens > 0 ? newCtx / t.outputTokens : 0;
+  });
+  const marginalN = normalize(marginalRaw);
+
+  // ── Work efficiency ───────────────────────────────────────────────────────
+  // "Useful artifact" = turn in the top 50% of output_tokens for this session.
+  // workEfficiencyRaw[i] = cumulative effectiveInput up to i / artifact count up to i
+  // Higher = more tokens spent per artifact = degrading efficiency.
+  const medianOutput = [...turns.map((t) => t.outputTokens)].sort((a, b) => a - b)[
+    Math.floor(turns.length / 2)
+  ] ?? 0;
+
+  let cumulativeInput = 0;
+  let artifactCount = 0;
+  const workRaw = turns.map((t) => {
+    cumulativeInput += effectiveInputs[turns.indexOf(t)]!;
+    if (t.outputTokens >= medianOutput) artifactCount++;
+    return artifactCount > 0 ? cumulativeInput / artifactCount : 0;
+  });
+  const workN = normalize(workRaw);
 
   return turns.map((t, i) => ({
     turnIndex: t.turnIndex,
     ctxPct: Math.round(t.ctxPct * 1000) / 10,
+    gcState: t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
     quality:
       Math.round(
         (densityN[i]! * 0.5 + (1 - scN[i]!) * 0.3 + (1 - repN[i]!) * 0.2) * 100,
       ) / 100,
-    gcState: t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
     outputDensity: t.outputDensity ?? 0,
+    marginalDensityRaw: marginalRaw[i]!,
+    marginalDensity: Math.round(marginalN[i]! * 100) / 100,
+    workEfficiencyRaw: Math.round(workRaw[i]!),
+    workEfficiency: Math.round(workN[i]! * 100) / 100,
   }));
 }
 
 export interface SessionStats {
   peakQuality: number;
   peakCtxPct: number;
-  inflectionCtxPct: number | null; // ctx% where sustained decline began
+  inflectionCtxPct: number | null;
   recentTrend: "rising" | "flat" | "declining";
-  qualityDelta: number;            // quality at inflection vs recent avg (negative = drop)
+  qualityDelta: number;
   firstGCCtxPct: number | null;
   firstGCType: string | null;
+  // new
+  avgMarginalDensity: number;       // avg new-ctx-tokens per output token
+  currentWorkEfficiency: number;    // tokens-per-artifact at end of session
 }
 
-export function deriveStats(points: ChartPoint[], firstGCCtxPct: number | null, firstGCType: string | null): SessionStats {
-  if (points.length === 0) {
-    return { peakQuality: 0, peakCtxPct: 0, inflectionCtxPct: null, recentTrend: "flat", qualityDelta: 0, firstGCCtxPct, firstGCType };
-  }
+export function deriveStats(
+  points: ChartPoint[],
+  firstGCCtxPct: number | null,
+  firstGCType: string | null,
+): SessionStats {
+  const empty: SessionStats = {
+    peakQuality: 0, peakCtxPct: 0, inflectionCtxPct: null,
+    recentTrend: "flat", qualityDelta: 0,
+    firstGCCtxPct, firstGCType,
+    avgMarginalDensity: 0, currentWorkEfficiency: 0,
+  };
+  if (points.length === 0) return empty;
 
-  // Peak — ignore first 3 turns (warm-up noise)
+  // Peak — skip first 3 warm-up turns
   const eligible = points.slice(Math.min(3, points.length - 1));
   const peak = eligible.reduce((best, p) => p.quality > best.quality ? p : best, eligible[0]!);
 
-  // Inflection — first point after peak where a 5-turn trailing average is
-  // at least 15% below peak and still declining
+  // Inflection — 5-turn trailing avg drops ≥15% below peak
   let inflectionCtxPct: number | null = null;
   const peakIdx = points.indexOf(peak);
-  const WINDOW = 5;
-  const THRESHOLD = 0.15;
-  for (let i = peakIdx + WINDOW; i < points.length; i++) {
-    const window = points.slice(i - WINDOW, i);
+  for (let i = peakIdx + 5; i < points.length; i++) {
+    const window = points.slice(i - 5, i);
     const avg = window.reduce((s, p) => s + p.quality, 0) / window.length;
-    if (peak.quality - avg >= THRESHOLD * peak.quality) {
+    if (peak.quality - avg >= 0.15 * peak.quality) {
       inflectionCtxPct = points[i]!.ctxPct;
       break;
     }
@@ -77,9 +128,24 @@ export function deriveStats(points: ChartPoint[], firstGCCtxPct: number | null, 
     : 0;
   const recentTrend = slope > 0.01 ? "rising" : slope < -0.01 ? "declining" : "flat";
 
-  // Quality delta: peak quality vs trailing 10-turn average
   const recentAvg = tail.reduce((s, p) => s + p.quality, 0) / tail.length;
-  const qualityDelta = recentAvg - peak.quality;
 
-  return { peakQuality: peak.quality, peakCtxPct: peak.ctxPct, inflectionCtxPct, recentTrend, qualityDelta, firstGCCtxPct, firstGCType };
+  // Avg marginal density (raw, in tokens) across session
+  const avgMarginalDensity =
+    points.reduce((s, p) => s + p.marginalDensityRaw, 0) / points.length;
+
+  // Work efficiency at the end of the session (raw tokens-per-artifact)
+  const currentWorkEfficiency = points[points.length - 1]!.workEfficiencyRaw;
+
+  return {
+    peakQuality: peak.quality,
+    peakCtxPct: peak.ctxPct,
+    inflectionCtxPct,
+    recentTrend,
+    qualityDelta: recentAvg - peak.quality,
+    firstGCCtxPct,
+    firstGCType,
+    avgMarginalDensity: Math.round(avgMarginalDensity),
+    currentWorkEfficiency,
+  };
 }
