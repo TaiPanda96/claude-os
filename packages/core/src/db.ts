@@ -1,17 +1,18 @@
-import { join } from "path";
+import { join } from "node:path";
 import { Database } from "bun:sqlite";
 import type { Session, Turn, GCEvent } from "./types.js";
 
 export type { Database };
 
-const DB_PATH =
-  process.env.CLAUDE_OS_DB_PATH ?? join(process.cwd(), "claude-os.sqlite");
-
 let _db: Database | null = null;
 
-export function getDb(): Database {
+export function getDb(dbPath?: string): Database {
   if (_db) return _db;
-  _db = new Database(DB_PATH);
+  const resolved =
+    dbPath ??
+    process.env.CLAUDE_OS_DB_PATH ??
+    join(import.meta.dir, "../../../claude-os.sqlite");
+  _db = new Database(resolved);
   _db.run("PRAGMA journal_mode = WAL");
   _db.run("PRAGMA foreign_keys = ON");
   migrate(_db);

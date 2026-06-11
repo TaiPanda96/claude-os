@@ -10,8 +10,8 @@
 import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file.js";
 import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
-import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-service.js";
 import { findJsonlForSession } from "@claude-os/core/ingest/project-discovery.js";
 
 const DB_PATH =

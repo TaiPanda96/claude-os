@@ -19,8 +19,11 @@ export type {
   GCState,
   SessionHealth,
 } from "./types.js";
-export { ingestJsonLFile, printIngestStats } from "./ingest/ingest-service.js";
-export type { IngestResult } from "./ingest/ingest-service.js";
+export {
+  ingestJsonLFile,
+  printIngestStats,
+} from "./ingest/ingest-jsonl-file.js";
+export type { IngestResult } from "./ingest/ingest-jsonl-file.js";
 export { initializeSchemas } from "./ingest/initialize-schemas.js";
 export {
   findJsonlForSession,
