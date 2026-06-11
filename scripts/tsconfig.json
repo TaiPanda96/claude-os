@@ -1,0 +1,15 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "types": ["bun"],
+    "baseUrl": "..",
+    "paths": {
+      "@claude-os/core": ["packages/core/src/index.ts"],
+      "@claude-os/core/*": ["packages/core/src/*"]
+    },
+    "noEmit": true
+  },
+  "include": ["."]
+}

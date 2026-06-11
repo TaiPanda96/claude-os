@@ -14,11 +14,9 @@ import { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import {
-  computeGCState,
-  MODEL_CONTEXT_WINDOWS,
-  SELF_CORRECTION_MARKERS,
-} from "../packages/core/src/types.js";
+import { computeGCState, MODEL_CONTEXT_WINDOWS } from "@claude-os/core";
+import { countSelfCorrections } from "@claude-os/core/utils/count-self-corrections.js";
+import { bigramOverlap } from "@claude-os/core/utils/bigram-overlap.js";
 
 const DB_PATH =
   process.env.CLAUDE_OS_DB_PATH ?? join(import.meta.dir, "../claude-os.sqlite");

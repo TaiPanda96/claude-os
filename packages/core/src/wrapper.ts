@@ -2,9 +2,18 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { MessageCreateParamsNonStreaming } from "@anthropic-ai/sdk/resources/messages.js";
 import type { RequestOptions } from "@anthropic-ai/sdk/core.js";
 import { v4 as uuidv4 } from "uuid";
-import { getDb, insertSession, insertTurn, insertGCEvent, updateSessionLastActive, closeSession } from "./db.js";
-import { computeGCState, MODEL_CONTEXT_WINDOWS, SELF_CORRECTION_MARKERS } from "./types.js";
+import {
+  getDb,
+  insertSession,
+  insertTurn,
+  insertGCEvent,
+  updateSessionLastActive,
+  closeSession,
+} from "./db.js";
+import { computeGCState, MODEL_CONTEXT_WINDOWS } from "./types.js";
 import type { Session, Turn, GCEvent, GCState } from "./types.js";
+import { bigramOverlap } from "./utils/bigram-overlap.js";
+import { countSelfCorrections } from "./utils/count-self-corrections.js";
 
 interface WrapperOptions {
   sessionName?: string;
@@ -15,48 +24,26 @@ interface WrapperOptions {
 
 interface InstrumentedClient {
   messages: {
-    create(body: MessageCreateParamsNonStreaming, options?: RequestOptions): Promise<Anthropic.Message>;
+    create(
+      body: MessageCreateParamsNonStreaming,
+      options?: RequestOptions,
+    ): Promise<Anthropic.Message>;
   };
   sessionId: string;
   getHealth: () => { ctxPct: number; gcState: GCState; turnCount: number };
   close: () => void;
 }
 
-function countSelfCorrections(text: string): number {
-  const lower = text.toLowerCase();
-  return SELF_CORRECTION_MARKERS.reduce((n, marker) => {
-    let count = 0;
-    let pos = 0;
-    while ((pos = lower.indexOf(marker, pos)) !== -1) { count++; pos += marker.length; }
-    return n + count;
-  }, 0);
-}
-
-function bigrams(text: string): Set<string> {
-  const words = text.toLowerCase().split(/\s+/).filter(Boolean);
-  const bg = new Set<string>();
-  for (let i = 0; i < words.length - 1; i++) bg.add(`${words[i]} ${words[i + 1]}`);
-  return bg;
-}
-
-function bigramOverlap(a: string, b: string): number {
-  if (!a || !b) return 0;
-  const bgA = bigrams(a);
-  const bgB = bigrams(b);
-  if (bgA.size === 0 || bgB.size === 0) return 0;
-  let shared = 0;
-  for (const bg of bgA) { if (bgB.has(bg)) shared++; }
-  return shared / Math.max(bgA.size, bgB.size);
-}
-
 export function createInstrumentedClient(
   apiKeyOrClient?: string | Anthropic,
-  options: WrapperOptions = {}
+  options: WrapperOptions = {},
 ): InstrumentedClient {
   const anthropic =
     apiKeyOrClient instanceof Anthropic
       ? apiKeyOrClient
-      : new Anthropic({ apiKey: apiKeyOrClient ?? process.env.ANTHROPIC_API_KEY });
+      : new Anthropic({
+          apiKey: apiKeyOrClient ?? process.env.ANTHROPIC_API_KEY,
+        });
 
   const db = getDb();
   const sessionId = options.sessionId ?? uuidv4();
@@ -65,7 +52,10 @@ export function createInstrumentedClient(
   let lastGCState: GCState = "clean";
   let lastOutputText = "";
 
-  async function create(params: MessageCreateParamsNonStreaming, requestOptions?: RequestOptions): Promise<Anthropic.Message> {
+  async function create(
+    params: MessageCreateParamsNonStreaming,
+    requestOptions?: RequestOptions,
+  ): Promise<Anthropic.Message> {
     const model = params.model;
     const ctxWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200_000;
 
