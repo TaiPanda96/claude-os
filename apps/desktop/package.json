@@ -1,0 +1,17 @@
+{
+  "name": "@claude-os/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "scripts": {
+    "dev": "tsc --noEmit -p tsconfig.json && tsc -p tsconfig.json && electron .",
+    "build": "tsc -p tsconfig.json",
+    "start": "electron .",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "electron": "^34.0.0",
+    "typescript": "^5.4.0"
+  }
+}

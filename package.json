@@ -5,13 +5,15 @@
   "type": "module",
   "description": "A macOS activity monitor for Claude sessions — real-time token economics, context window health, and GC state tracking.",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "scripts": {
     "dev:core": "bun run --cwd packages/core dev",
     "dev:server": "bun run --cwd packages/server dev",
+    "dev:desktop": "bun run --cwd apps/desktop dev",
     "build": "bun run --cwd packages/core build && bun run --cwd packages/server build",
-    "typecheck": "tsc --noEmit -p tsconfig.json && bun run --cwd packages/core typecheck && bun run --cwd packages/server typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json && bun run --cwd packages/core typecheck && bun run --cwd packages/server typecheck && bun run --cwd apps/desktop typecheck",
     "ingest": "bun run scripts/ingest.ts",
     "ingest:stats": "bun run scripts/ingest.ts --stats",
     "ingest:verbose": "bun run scripts/ingest.ts --verbose"
