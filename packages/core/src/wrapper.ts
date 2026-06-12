@@ -9,8 +9,10 @@ import {
   insertGCEvent,
   updateSessionLastActive,
   closeSession,
+  resolveProjectId,
 } from "./db.js";
 import { computeGCState, MODEL_CONTEXT_WINDOWS } from "./types.js";
+import { evaluateTriggers } from "./trigger-evaluator.js";
 import type { Session, Turn, GCEvent, GCState } from "./types.js";
 import { bigramOverlap } from "./utils/bigram-overlap.js";
 import { countSelfCorrections } from "./utils/count-self-corrections.js";
@@ -19,6 +21,7 @@ interface WrapperOptions {
   sessionName?: string;
   sessionId?: string;
   forkedFrom?: string;
+  cwd?: string;
   onGCStateChange?: (state: GCState, ctxPct: number) => void;
 }
 
@@ -60,6 +63,8 @@ export function createInstrumentedClient(
     const ctxWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200_000;
 
     if (turnIndex === 0) {
+      const cwd = options.cwd ?? process.cwd();
+      const projectId = resolveProjectId(db, cwd);
       const session: Session = {
         id: sessionId,
         name: options.sessionName ?? null,
@@ -70,6 +75,7 @@ export function createInstrumentedClient(
         status: "active",
         outcomeStatus: "unresolved",
         forkedFrom: options.forkedFrom ?? null,
+        projectId,
       };
       insertSession(db, session);
     }
@@ -105,6 +111,9 @@ export function createInstrumentedClient(
 
     insertTurn(db, turn);
     updateSessionLastActive(db, sessionId);
+
+    // Phase 4 — evaluate compaction triggers (non-blocking)
+    evaluateTriggers(db, sessionId, turn, outputText, options.cwd ?? process.cwd());
 
     const gcState = computeGCState(ctxPct);
     if (gcState !== lastGCState && gcState !== "clean") {

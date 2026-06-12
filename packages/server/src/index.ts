@@ -1,6 +1,13 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { getDb, getSession, getSessionTurns, computeSessionHealthStats } from "@claude-os/core";
+import { v4 as uuidv4 } from "uuid";
+import {
+  getDb, getSession, getSessionTurns, computeSessionHealthStats,
+  getPolicy, upsertPolicy, getCompactionEvents, resolveProjectId,
+} from "@claude-os/core";
+import type { CompactionPolicy } from "@claude-os/core";
+import { runCompaction } from "@claude-os/core/compaction";
+import { TriggerTypeEnum } from "@claude-os/core";
 
 /**
  * The main server entry point for the Claude OS application. This server provides API endpoints for managing sessions, turns, and garbage collection events.
@@ -57,6 +64,71 @@ app.get("/sessions/:id/gc-events", (c) => {
     )
     .all({ $sessionId: c.req.param("id") });
   return c.json(events);
+});
+
+// ── Policy management ─────────────────────────────────────────────────────────
+
+app.get("/projects/:id/policy", (c) => {
+  const db = getDb();
+  const policy = getPolicy(db, c.req.param("id"));
+  if (!policy) return c.json({ error: "no policy configured" }, 404);
+  return c.json(policy);
+});
+
+app.put("/projects/:id/policy", async (c) => {
+  const db = getDb();
+  const projectId = c.req.param("id");
+  const body = await c.req.json() as Omit<CompactionPolicy, "id" | "project_id" | "created_at" | "updated_at">;
+  const existing = getPolicy(db, projectId);
+  const now = new Date().toISOString();
+  const policy: CompactionPolicy = {
+    id: existing?.id ?? uuidv4(),
+    project_id: projectId,
+    created_at: existing?.created_at ?? now,
+    updated_at: now,
+    ...body,
+  };
+  upsertPolicy(db, policy);
+  return c.json(policy);
+});
+
+// ── Compaction history ────────────────────────────────────────────────────────
+
+app.get("/sessions/:id/compaction-events", (c) => {
+  const db = getDb();
+  const events = getCompactionEvents(db, c.req.param("id"));
+  return c.json(events);
+});
+
+// ── Manual compaction ─────────────────────────────────────────────────────────
+
+app.post("/sessions/:id/compact", async (c) => {
+  const db = getDb();
+  const sessionId = c.req.param("id");
+  const session = getSession(db, sessionId);
+  if (!session) return c.json({ error: "session not found" }, 404);
+  if (!session.projectId) return c.json({ error: "session has no project" }, 400);
+
+  const policy = getPolicy(db, session.projectId);
+  if (!policy || !policy.active)
+    return c.json({ error: "no active policy for this project" }, 400);
+
+  const turns = getSessionTurns(db, sessionId);
+  const lastTurn = turns[turns.length - 1];
+  if (!turns.length || !lastTurn) return c.json({ error: "no turns in session" }, 400);
+
+  // Run in background, return immediately with event id
+  const eventPromise = runCompaction(
+    db, sessionId, policy,
+    TriggerTypeEnum.MANUAL, "manual compaction",
+    lastTurn.cumulativeTokens,
+    (session as any).cwd ?? "",
+  );
+
+  // Fire and forget — client polls /compaction-events for result
+  eventPromise.catch((err) => console.error("[compact]", err));
+
+  return c.json({ status: "started", session_id: sessionId, policy_id: policy.id });
 });
 
 export default { port: PORT, fetch: app.fetch };

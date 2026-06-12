@@ -7,6 +7,7 @@ import {
   Database,
   computeGCState,
 } from "../types.js";
+import { resolveProjectId } from "../db.js";
 import { bigramOverlap } from "../utils/bigram-overlap.js";
 import { countSelfCorrections } from "../utils/count-self-corrections.js";
 
@@ -80,12 +81,15 @@ export function ingestJsonLFile(
     const cwd = turns[0]?.cwd ?? "";
     const name = basename(cwd) || null;
 
+    const projectId = cwd ? resolveProjectId(db, cwd) : null;
+
     // Upsert session
     db.prepare(
       `
-      INSERT INTO sessions (id, name, model, ctx_window, created_at, last_active_at, status, outcome_status, forked_from)
-      VALUES ($id, $name, $model, $ctxWindow, $createdAt, $lastActiveAt, 'active', 'unresolved', null)
-      ON CONFLICT(id) DO UPDATE SET last_active_at = excluded.last_active_at, model = excluded.model
+      INSERT INTO sessions (id, name, model, ctx_window, created_at, last_active_at, status, outcome_status, forked_from, project_id)
+      VALUES ($id, $name, $model, $ctxWindow, $createdAt, $lastActiveAt, 'active', 'unresolved', null, $projectId)
+      ON CONFLICT(id) DO UPDATE SET last_active_at = excluded.last_active_at, model = excluded.model,
+        project_id = COALESCE(excluded.project_id, project_id)
     `,
     ).run({
       $id: sessionId,
@@ -94,6 +98,7 @@ export function ingestJsonLFile(
       $ctxWindow: ctxWindow,
       $createdAt: createdAt,
       $lastActiveAt: lastActiveAt,
+      $projectId: projectId,
     });
     sessionsInserted++;
 

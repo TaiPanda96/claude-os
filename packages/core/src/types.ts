@@ -16,6 +16,7 @@ export interface Session {
   status: SessionStatus;
   outcomeStatus: OutcomeStatus;
   forkedFrom: string | null;
+  projectId: string | null;
 }
 
 export interface Turn {

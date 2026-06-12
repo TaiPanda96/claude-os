@@ -81,20 +81,13 @@ function migrate(db: Database): void {
 
 export function insertSession(db: Database, s: Session): void {
   db.prepare(
-    `
-    INSERT INTO sessions (id, name, model, ctx_window, created_at, last_active_at, status, outcome_status, forked_from)
-    VALUES ($id, $name, $model, $ctxWindow, $createdAt, $lastActiveAt, $status, $outcomeStatus, $forkedFrom)
-  `,
+    `INSERT INTO sessions (id, name, model, ctx_window, created_at, last_active_at, status, outcome_status, forked_from, project_id)
+     VALUES ($id, $name, $model, $ctxWindow, $createdAt, $lastActiveAt, $status, $outcomeStatus, $forkedFrom, $projectId)`,
   ).run({
-    $id: s.id,
-    $name: s.name,
-    $model: s.model,
-    $ctxWindow: s.ctxWindow,
-    $createdAt: s.createdAt,
-    $lastActiveAt: s.lastActiveAt,
-    $status: s.status,
-    $outcomeStatus: s.outcomeStatus,
-    $forkedFrom: s.forkedFrom,
+    $id: s.id, $name: s.name, $model: s.model, $ctxWindow: s.ctxWindow,
+    $createdAt: s.createdAt, $lastActiveAt: s.lastActiveAt,
+    $status: s.status, $outcomeStatus: s.outcomeStatus,
+    $forkedFrom: s.forkedFrom, $projectId: s.projectId ?? null,
   });
 }
 
