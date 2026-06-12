@@ -4,10 +4,9 @@ import { v4 as uuidv4 } from "uuid";
 import {
   getDb, getSession, getSessionTurns, computeSessionHealthStats,
   getPolicy, upsertPolicy, getCompactionEvents, resolveProjectId,
+  runCompaction, TriggerTypeEnum,
 } from "@claude-os/core";
 import type { CompactionPolicy } from "@claude-os/core";
-import { runCompaction } from "@claude-os/core/compaction";
-import { TriggerTypeEnum } from "@claude-os/core";
 
 /**
  * The main server entry point for the Claude OS application. This server provides API endpoints for managing sessions, turns, and garbage collection events.
@@ -126,7 +125,7 @@ app.post("/sessions/:id/compact", async (c) => {
   );
 
   // Fire and forget — client polls /compaction-events for result
-  eventPromise.catch((err) => console.error("[compact]", err));
+  eventPromise.catch((err: unknown) => console.error("[compact]", err));
 
   return c.json({ status: "started", session_id: sessionId, policy_id: policy.id });
 });
