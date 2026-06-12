@@ -158,7 +158,7 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                 {/* CTX % */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
                   <span style={{ ...styles.mono, color, fontWeight: 600 }}>
-                    {(pct * 100).toFixed(1)}%
+                    {Math.min(pct * 100, 100).toFixed(1)}%
                   </span>
                 </td>
 

@@ -19,21 +19,29 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const dragStart = useRef<{ y: number; h: number } | null>(null);
 
-  const onDragStart = useCallback((e: React.MouseEvent) => {
-    dragStart.current = { y: e.clientY, h: height };
-    const onMove = (mv: MouseEvent) => {
-      if (!dragStart.current) return;
-      const delta = dragStart.current.y - mv.clientY;
-      setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, dragStart.current.h + delta)));
-    };
-    const onUp = () => {
-      dragStart.current = null;
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-  }, [height]);
+  const onDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      dragStart.current = { y: e.clientY, h: height };
+      const onMove = (mv: MouseEvent) => {
+        if (!dragStart.current) return;
+        const delta = dragStart.current.y - mv.clientY;
+        setHeight(
+          Math.min(
+            MAX_HEIGHT,
+            Math.max(MIN_HEIGHT, dragStart.current.h + delta),
+          ),
+        );
+      };
+      const onUp = () => {
+        dragStart.current = null;
+        window.removeEventListener("mousemove", onMove);
+        window.removeEventListener("mouseup", onUp);
+      };
+      window.addEventListener("mousemove", onMove);
+      window.addEventListener("mouseup", onUp);
+    },
+    [height],
+  );
 
   const pct = session.current_ctx_pct ?? 0;
   const state = gcState(pct);
@@ -51,10 +59,14 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
         <span style={{ ...styles.dot, background: color }} />
         <span style={styles.sessionName}>{session.name ?? "unnamed"}</span>
         <span style={styles.sessionId}>{session.id.slice(0, 8)}</span>
-        <span style={{ ...styles.ctxBadge, color }}>{(pct * 100).toFixed(1)}% ctx</span>
+        <span style={{ ...styles.ctxBadge, color }}>
+          {(Math.min(1, pct) * 100).toFixed(1)}% ctx
+        </span>
         <span style={styles.turns}>{session.turn_count} turns</span>
         <span style={styles.model}>{session.model.replace("claude-", "")}</span>
-        <button style={styles.close} onClick={onClose}>✕</button>
+        <button style={styles.close} onClick={onClose}>
+          ✕
+        </button>
       </div>
 
       {/* Summary + curve */}
