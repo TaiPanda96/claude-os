@@ -26,20 +26,31 @@ function normalize(values: number[]): number[] {
     : values.map((v) => (v - min) / range);
 }
 
+// Fixed upper bound for output_density derived from empirical data (observed max ~0.34).
+// Using a fixed anchor instead of per-session min-max keeps quality scores comparable
+// across sessions — otherwise a weak session that peaks at 0.15 density gets stretched
+// to 1.0, making it look identical to a strong session that peaks at 0.34.
+const OUTPUT_DENSITY_ANCHOR = 0.4;
+
 export function computeQuality(turns: Turn[]): ChartPoint[] {
   if (turns.length === 0) return [];
 
-  // ── Quality proxy ────────────────────────────────────────────────────────
-  const densityN = normalize(turns.map((t) => t.outputDensity ?? 0));
-  const scN      = normalize(turns.map((t) => t.selfCorrectionCount ?? 0));
-  const repN     = normalize(turns.map((t) => t.repetitionScore ?? 0));
+  // Exclude turns where ctx_pct > 1.0 — these come from sessions whose model was not
+  // in MODEL_CONTEXT_WINDOWS and fell back to the 200k default, producing impossible
+  // percentages that corrupt every downstream metric.
+  const validTurns = turns.filter((t) => t.ctxPct <= 1.0);
+  if (validTurns.length === 0) return [];
+
+  // ── Quality proxy — fixed-anchor scaling ─────────────────────────────────
+  // output_density is scaled against a fixed empirical ceiling rather than the
+  // per-session min-max so that absolute magnitude is preserved across sessions.
 
   // ── Marginal density ─────────────────────────────────────────────────────
   // effectiveInput[i] = cumulativeTokens[i] - outputTokens[i]
   // newContextTokens[i] = effectiveInput[i] - effectiveInput[i-1]
   // marginalDensityRaw[i] = newContextTokens[i] / outputTokens[i]
-  const effectiveInputs = turns.map((t) => t.cumulativeTokens - t.outputTokens);
-  const marginalRaw = turns.map((t, i) => {
+  const effectiveInputs = validTurns.map((t) => t.cumulativeTokens - t.outputTokens);
+  const marginalRaw = validTurns.map((t, i) => {
     const prev = i === 0 ? 0 : effectiveInputs[i - 1]!;
     const newCtx = Math.max(0, effectiveInputs[i]! - prev);
     return t.outputTokens > 0 ? newCtx / t.outputTokens : 0;
@@ -50,27 +61,28 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
   // "Useful artifact" = turn in the top 50% of output_tokens for this session.
   // workEfficiencyRaw[i] = cumulative effectiveInput up to i / artifact count up to i
   // Higher = more tokens spent per artifact = degrading efficiency.
-  const medianOutput = [...turns.map((t) => t.outputTokens)].sort((a, b) => a - b)[
-    Math.floor(turns.length / 2)
+  const medianOutput = [...validTurns.map((t) => t.outputTokens)].sort((a, b) => a - b)[
+    Math.floor(validTurns.length / 2)
   ] ?? 0;
 
   let cumulativeInput = 0;
   let artifactCount = 0;
-  const workRaw = turns.map((t) => {
-    cumulativeInput += effectiveInputs[turns.indexOf(t)]!;
+  const workRaw = validTurns.map((t, i) => {
+    cumulativeInput += effectiveInputs[i]!;
     if (t.outputTokens >= medianOutput) artifactCount++;
     return artifactCount > 0 ? cumulativeInput / artifactCount : 0;
   });
   const workN = normalize(workRaw);
 
-  return turns.map((t, i) => ({
+  return validTurns.map((t, i) => ({
     turnIndex: t.turnIndex,
     ctxPct: Math.round(t.ctxPct * 1000) / 10,
     gcState: t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
-    quality:
-      Math.round(
-        (densityN[i]! * 0.5 + (1 - scN[i]!) * 0.3 + (1 - repN[i]!) * 0.2) * 100,
-      ) / 100,
+    quality: Math.round(
+      (Math.min(1, (t.outputDensity ?? 0) / OUTPUT_DENSITY_ANCHOR) * 0.5
+        + (1 - Math.min(1, t.selfCorrectionCount ?? 0)) * 0.3
+        + (1 - (t.repetitionScore ?? 0)) * 0.2) * 100,
+    ) / 100,
     outputDensity: t.outputDensity ?? 0,
     marginalDensityRaw: marginalRaw[i]!,
     marginalDensity: Math.round(marginalN[i]! * 100) / 100,
