@@ -14,7 +14,11 @@ import { spawnSync } from "node:child_process";
 const REPO_ROOT = resolve(dirname(import.meta.path), "..");
 const HOOK_SCRIPT = join(REPO_ROOT, "scripts", "hook-stop.ts");
 const SETTINGS_PATH = join(process.env.HOME ?? "~", ".claude", "settings.json");
-const CLAUDE_PROJECTS_PATH = join(process.env.HOME ?? "~", ".claude", "projects");
+const CLAUDE_PROJECTS_PATH = join(
+  process.env.HOME ?? "~",
+  ".claude",
+  "projects",
+);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -39,11 +43,15 @@ function which(cmd: string): boolean {
 }
 
 function semverAtLeast(actual: string, required: string): boolean {
-  const a = actual.replace(/[^0-9.]/g, "").split(".").map(Number);
+  const a = actual
+    .replace(/[^0-9.]/g, "")
+    .split(".")
+    .map(Number);
   const r = required.split(".").map(Number);
   for (let i = 0; i < r.length; i++) {
-    if ((a[i] ?? 0) > r[i]) return true;
-    if ((a[i] ?? 0) < r[i]) return false;
+    if (!r[i]) return true; // required doesn't specify this segment, so ignore
+    if ((a[i] ?? 0) > (r[i] ?? 0)) return true;
+    if ((a[i] ?? 0) < (r[i] ?? 0)) return false;
   }
   return true;
 }
@@ -55,7 +63,8 @@ header("Checking prerequisites");
 let prereqsFailed = false;
 
 // Bun ≥ 1.1
-const bunVersion = spawnSync("bun", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
+const bunVersion =
+  spawnSync("bun", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
 if (bunVersion && semverAtLeast(bunVersion, "1.1")) {
   ok(`Bun ${bunVersion}`);
 } else if (bunVersion) {
@@ -67,7 +76,8 @@ if (bunVersion && semverAtLeast(bunVersion, "1.1")) {
 }
 
 // Node ≥ 20 (required by Electron)
-const nodeVersion = spawnSync("node", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
+const nodeVersion =
+  spawnSync("node", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
 if (nodeVersion && semverAtLeast(nodeVersion.replace("v", ""), "20.0")) {
   ok(`Node.js ${nodeVersion}`);
 } else if (nodeVersion) {
@@ -102,18 +112,23 @@ if (existsSync(SETTINGS_PATH)) {
   try {
     settings = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
   } catch {
-    fail(`Could not parse ${SETTINGS_PATH} — fix JSON errors before running setup.`);
+    fail(
+      `Could not parse ${SETTINGS_PATH} — fix JSON errors before running setup.`,
+    );
     process.exit(1);
   }
 }
 
 // Ensure hooks.Stop exists as an array
 const hooks = (settings.hooks ?? {}) as Record<string, unknown>;
-const stopHooks = (hooks.Stop ?? []) as Array<{ matcher?: string; hooks: Array<{ type: string; command: string }> }>;
+const stopHooks = (hooks.Stop ?? []) as Array<{
+  matcher?: string;
+  hooks: Array<{ type: string; command: string }>;
+}>;
 
 // Idempotency check — look for any entry that already points to hook-stop.ts
 const alreadyInstalled = stopHooks.some((group) =>
-  group.hooks?.some((h) => h.command?.includes("hook-stop.ts"))
+  group.hooks?.some((h) => h.command?.includes("hook-stop.ts")),
 );
 
 if (alreadyInstalled) {
@@ -125,7 +140,11 @@ if (alreadyInstalled) {
   });
   hooks.Stop = stopHooks;
   settings.hooks = hooks;
-  writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf-8");
+  writeFileSync(
+    SETTINGS_PATH,
+    JSON.stringify(settings, null, 2) + "\n",
+    "utf-8",
+  );
   ok(`Stop hook added to ${SETTINGS_PATH}`);
   info(`Command: ${hookCommand}`);
 }
@@ -137,21 +156,29 @@ header("Existing session data");
 let transcriptCount = 0;
 if (existsSync(CLAUDE_PROJECTS_PATH)) {
   try {
-    for (const project of readdirSync(CLAUDE_PROJECTS_PATH, { withFileTypes: true })) {
+    for (const project of readdirSync(CLAUDE_PROJECTS_PATH, {
+      withFileTypes: true,
+    })) {
       if (!project.isDirectory()) continue;
       const projectDir = join(CLAUDE_PROJECTS_PATH, project.name);
       for (const file of readdirSync(projectDir)) {
         if (file.endsWith(".jsonl")) transcriptCount++;
       }
     }
-  } catch { /* permission issues on some machines */ }
+  } catch {
+    /* permission issues on some machines */
+  }
 }
 
 if (transcriptCount > 0) {
   info(`Found ${transcriptCount} transcript(s) in ~/.claude/projects/`);
-  info("Run \x1b[1mbun run ingest\x1b[0m to populate the database with existing sessions.");
+  info(
+    "Run \x1b[1mbun run ingest\x1b[0m to populate the database with existing sessions.",
+  );
 } else {
-  info("No existing transcripts found — the database will populate as you use Claude Code.");
+  info(
+    "No existing transcripts found — the database will populate as you use Claude Code.",
+  );
 }
 
 // ── Done ──────────────────────────────────────────────────────────────────────
