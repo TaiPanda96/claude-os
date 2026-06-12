@@ -595,6 +595,27 @@
     opacity: 1;
   }
 
+  .phase.done {
+    opacity: 0.55;
+  }
+
+  .phase.done .phase-items li::before {
+    content: '✓';
+    color: var(--text-3);
+    font-size: 10px;
+  }
+
+  .phase-done-badge {
+    display: inline-block;
+    font-size: 10px;
+    background: rgba(99,99,102,0.15);
+    color: var(--text-3);
+    padding: 2px 6px;
+    border-radius: 4px;
+    margin-top: 6px;
+    letter-spacing: 0.04em;
+  }
+
   /* ── FOOTER ── */
   footer {
     border-top: 0.5px solid var(--border);
@@ -679,7 +700,7 @@
       <line x1="15" y1="22" x2="25" y2="22" stroke="#00C9A7" stroke-width="0.6" opacity="0.3"/>
     </svg>
   </div>
-  <div class="hero-eyebrow">v0.1 — Phase 0 in progress</div>
+  <div class="hero-eyebrow">v0.1 — Phase 3 in progress</div>
   <h1 class="hero-title">Claude <span>OS</span></h1>
   <p class="hero-sub">A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state — before quality degrades.</p>
 
@@ -840,23 +861,26 @@
   <p class="section-body">From a CLI proof-of-concept to an open-source, Homebrew-installable macOS utility. With an MCP server surface so Claude can read its own context health.</p>
 
   <div class="roadmap">
-    <div class="phase current">
+    <div class="phase done">
       <div>
-        <div class="phase-num current">Phase 0</div>
-        <div class="phase-current-badge">▸ current</div>
+        <div class="phase-num">Phase 0</div>
+        <div class="phase-done-badge">✓ done</div>
       </div>
       <div>
         <div class="phase-title">Proof of Concept</div>
         <ul class="phase-items">
-          <li>Anthropic Messages API wrapper — per-turn token capture</li>
+          <li>Claude Code hook — per-turn token capture via JSONL transcripts</li>
           <li>Session-level context utilisation % in real time</li>
           <li>Quality proxy logging: length, latency, self-correction rate</li>
           <li>SQLite store + efficiency curve notebook</li>
         </ul>
       </div>
     </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 1</div></div>
+    <div class="phase done">
+      <div>
+        <div class="phase-num">Phase 1</div>
+        <div class="phase-done-badge">✓ done</div>
+      </div>
       <div>
         <div class="phase-title">Menu Bar Sprite</div>
         <ul class="phase-items">
@@ -866,8 +890,11 @@
         </ul>
       </div>
     </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 2</div></div>
+    <div class="phase done">
+      <div>
+        <div class="phase-num">Phase 2</div>
+        <div class="phase-done-badge">✓ done</div>
+      </div>
       <div>
         <div class="phase-title">Activity Monitor Window</div>
         <ul class="phase-items">
@@ -877,8 +904,11 @@
         </ul>
       </div>
     </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 3</div></div>
+    <div class="phase current">
+      <div>
+        <div class="phase-num current">Phase 3</div>
+        <div class="phase-current-badge">▸ current</div>
+      </div>
       <div>
         <div class="phase-title">Compaction Engine</div>
         <ul class="phase-items">
