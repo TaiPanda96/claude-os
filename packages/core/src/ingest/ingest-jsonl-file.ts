@@ -108,7 +108,9 @@ export function ingestJsonLFile(
       const effectiveInput = u.input_tokens + cacheRead + cacheCreation;
       // cumulative = effective input for this turn (already contains full history) + output
       const cumulativeTokens = effectiveInput + u.output_tokens;
-      const ctxPct = effectiveInput / ctxWindow;
+      // Clamp at 1.0: values above 1 indicate an unknown model window (falls back to 200k
+      // default) where the actual window is larger. Storing raw >1 values corrupts metrics.
+      const ctxPct = Math.min(effectiveInput / ctxWindow, 1.0);
 
       // Latency: find the preceding user record via parentUuid or timestamp proximity
       const userRecord = turn.parentUuid
@@ -202,7 +204,7 @@ export function ingestJsonLFile(
         u.input_tokens +
         (u.cache_read_input_tokens ?? 0) +
         (u.cache_creation_input_tokens ?? 0);
-      const ctxPct = effectiveInput / ctxWindow;
+      const ctxPct = Math.min(effectiveInput / ctxWindow, 1.0);
       console.log(
         `  ${sessionId.slice(0, 8)}  ${turns.length} turns  ctx=${(ctxPct * 100).toFixed(1)}%  ${name}`,
       );
