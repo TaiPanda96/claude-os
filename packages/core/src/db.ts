@@ -162,6 +162,7 @@ function rowToSession(r: any): Session {
     status: r.status,
     outcomeStatus: r.outcome_status,
     forkedFrom: r.forked_from,
+    projectId: r.project_id ?? null,
   };
 }
 
