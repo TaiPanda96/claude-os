@@ -63,14 +63,8 @@ coverage/
 .nyc_output/
 claude-os.sqlite*
 
-# Docs Specs
-docs/specs/
-
-# Docs Design System
+# Design System
 docs/design-system/
-
-# Ignore SQLite databases
-*.sqlite
 claude-os.sqlite*
 claude-os.sqlite-shm
 claude-os.sqlite-wal
