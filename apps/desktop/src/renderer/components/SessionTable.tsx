@@ -12,7 +12,7 @@ interface Props {
 }
 
 const GC_LABEL: Record<GCState, string> = {
-  clean:   "Clean",
+  clean: "Clean",
   soft_gc: "Soft GC",
   hard_gc: "Hard GC",
 };
@@ -219,7 +219,7 @@ const styles: Record<string, React.CSSProperties> = {
     borderBottom: `0.5px solid ${tokens.border}`,
     position: "sticky",
     top: 0,
-    background: tokens.surface0,
+    background: tokens.headerRow,
     zIndex: 1,
   },
   th: {

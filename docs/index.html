@@ -65,17 +65,10 @@
     letter-spacing: -0.01em;
   }
 
-  .nav-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 8px var(--green);
-    animation: pulse-dot 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
+  .nav-mark {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
   }
 
   .nav-links {
@@ -648,7 +641,19 @@
 <!-- NAV -->
 <nav>
   <div class="nav-logo">
-    <div class="nav-dot"></div>
+    <span class="nav-mark">
+      <svg width="20" height="20" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect width="40" height="40" rx="6" fill="#0D1117"/>
+        <path d="M12 8 L9 8 L9 32 L12 32" stroke="#00C9A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M28 8 L31 8 L31 32 L28 32" stroke="#00C9A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="20" cy="14" r="2.5" fill="#00C9A7"/>
+        <circle cx="15" cy="22" r="1.8" fill="#00C9A7" opacity="0.65"/>
+        <circle cx="25" cy="22" r="1.8" fill="#00C9A7" opacity="0.65"/>
+        <line x1="20" y1="14" x2="15" y2="22" stroke="#00C9A7" stroke-width="0.8" opacity="0.5"/>
+        <line x1="20" y1="14" x2="25" y2="22" stroke="#00C9A7" stroke-width="0.8" opacity="0.5"/>
+        <line x1="15" y1="22" x2="25" y2="22" stroke="#00C9A7" stroke-width="0.6" opacity="0.3"/>
+      </svg>
+    </span>
     Claude OS
   </div>
   <div class="nav-links">
@@ -661,6 +666,19 @@
 
 <!-- HERO -->
 <div class="hero">
+  <div style="margin-bottom:24px;opacity:0;animation:fade-up 0.6s ease forwards 0s">
+    <svg width="56" height="56" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="Claude OS">
+      <rect width="40" height="40" rx="8" fill="#0D1117"/>
+      <path d="M12 8 L9 8 L9 32 L12 32" stroke="#00C9A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M28 8 L31 8 L31 32 L28 32" stroke="#00C9A7" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="20" cy="14" r="2.5" fill="#00C9A7"/>
+      <circle cx="15" cy="22" r="1.8" fill="#00C9A7" opacity="0.65"/>
+      <circle cx="25" cy="22" r="1.8" fill="#00C9A7" opacity="0.65"/>
+      <line x1="20" y1="14" x2="15" y2="22" stroke="#00C9A7" stroke-width="0.8" opacity="0.5"/>
+      <line x1="20" y1="14" x2="25" y2="22" stroke="#00C9A7" stroke-width="0.8" opacity="0.5"/>
+      <line x1="15" y1="22" x2="25" y2="22" stroke="#00C9A7" stroke-width="0.6" opacity="0.3"/>
+    </svg>
+  </div>
   <div class="hero-eyebrow">v0.1 — Phase 0 in progress</div>
   <h1 class="hero-title">Claude <span>OS</span></h1>
   <p class="hero-sub">A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state — before quality degrades.</p>
