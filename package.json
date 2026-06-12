@@ -9,6 +9,7 @@
     "apps/*"
   ],
   "scripts": {
+    "setup": "bun run scripts/setup.ts",
     "dev": "bun run --cwd apps/desktop dev",
     "dev:core": "bun run --cwd packages/core dev",
     "dev:server": "bun run --cwd packages/server dev",

@@ -94,29 +94,13 @@ cd claude-os
 bun install
 ```
 
-**1. Wire the Claude Code hook**
+**1. Run setup**
 
-Claude OS captures session data via Claude Code's `stop` hook. Add this to `~/.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "matcher": "",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bun run /absolute/path/to/claude-os/scripts/hook-stop.ts"
-          }
-        ]
-      }
-    ]
-  }
-}
+```bash
+bun run setup
 ```
 
-Replace `/absolute/path/to/claude-os` with the path to your clone. Every Claude Code session that ends will now write its turn data to `claude-os.sqlite` at the repo root.
+This checks prerequisites (Bun, Node, Claude Code CLI), wires the `Stop` hook into `~/.claude/settings.json` with the correct absolute path, and tells you how many existing transcripts are available to ingest. Safe to re-run — idempotent.
 
 **2. Ingest existing sessions (optional)**
 
