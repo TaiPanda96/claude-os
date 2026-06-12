@@ -1,0 +1,44 @@
+/* Claude OS — Design Tokens v0.1
+   Base palette, spacing, radii, type scale. Dark-mode-first, always. */
+
+:root {
+  /* Base palette — charcoal dark, macOS Activity Monitor register */
+  --void:      #1C1C1C;
+  --surface-0: #222222;
+  --surface-1: #2A2A2A;
+  --surface-2: #333333;
+  --border:    #444444;
+  --muted:     #888888;
+  --text:      #E0E0E0;
+  --highlight: #F8F8F8;
+
+  /* Typography */
+  --font-mono: 'Berkeley Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+
+  --fs-display: 22px;
+  --fs-section: 15px;
+  --fs-body:    13px;
+  --fs-label:   11px;
+  --fs-data:    12px;
+  --fs-micro:   10px;
+
+  /* Spacing */
+  --sp-1:  4px;
+  --sp-2:  8px;
+  --sp-3:  12px;
+  --sp-4:  16px;
+  --sp-6:  24px;
+  --sp-10: 40px;
+
+  /* Border radii */
+  --radius-xs:   2px;
+  --radius-sm:   4px;
+  --radius-md:   8px;
+  --radius-lg:   12px;
+  --radius-pill: 999px;
+
+  /* Stroke weights */
+  --stroke-thin:  0.5px;
+  --stroke-base:  1px;
+  --stroke-alert: 2px;
+}

@@ -9,8 +9,9 @@ import {
   ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
-import { Turn, GCEvent, GC_COLOR } from "../types.js";
+import { Turn, GCEvent, GC_COLOR, GC_TEXT } from "../types.js";
 import { ChartPoint, Metric, computeQuality } from "../quality.js";
+import { tokens } from "../theme.js";
 
 const METRIC_CONFIG: Record<Metric, { label: string; yLabel: string; description: string; color: string }> = {
   quality: {
@@ -45,10 +46,10 @@ function CustomDot(props: any) {
 function CustomTooltip({ active, payload, metric }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload as ChartPoint;
-  const stateColor = GC_COLOR[d.gcState as keyof typeof GC_COLOR] ?? GC_COLOR.clean;
+  const stateTextColor = GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
   return (
     <div style={tooltipStyle}>
-      <div style={{ color: stateColor, fontWeight: 600, marginBottom: 6 }}>
+      <div style={{ color: stateTextColor, fontWeight: 600, marginBottom: 6 }}>
         {d.ctxPct.toFixed(1)}% context · turn #{d.turnIndex}
       </div>
       <div style={tooltipRow}>
@@ -59,14 +60,14 @@ function CustomTooltip({ active, payload, metric }: any) {
         <span style={{ ...tooltipLabel, color: METRIC_CONFIG.marginalDensity.color }}>marginal density</span>
         <span style={tooltipValue}>
           {d.marginalDensityRaw.toFixed(1)}x
-          <span style={{ color: "#48484a", marginLeft: 4 }}>({d.marginalDensity.toFixed(2)})</span>
+          <span style={{ color: tokens.muted, marginLeft: 4 }}>({d.marginalDensity.toFixed(2)})</span>
         </span>
       </div>
       <div style={tooltipRow}>
         <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>work efficiency</span>
         <span style={tooltipValue}>
           {d.workEfficiencyRaw.toLocaleString()} tok/artifact
-          <span style={{ color: "#48484a", marginLeft: 4 }}>({d.workEfficiency.toFixed(2)})</span>
+          <span style={{ color: tokens.muted, marginLeft: 4 }}>({d.workEfficiency.toFixed(2)})</span>
         </span>
       </div>
     </div>
@@ -74,17 +75,17 @@ function CustomTooltip({ active, payload, metric }: any) {
 }
 
 const tooltipStyle: React.CSSProperties = {
-  background: "#1c1c1e",
-  border: "1px solid #3a3a3c",
-  borderRadius: 6,
+  background: tokens.surface1,
+  border: `1px solid ${tokens.border}`,
+  borderRadius: tokens.radiusMd,
   padding: "10px 14px",
-  fontSize: 12,
-  fontFamily: "monospace",
+  fontSize: tokens.fsData,
+  fontFamily: tokens.fontMono,
   minWidth: 240,
 };
 const tooltipRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 16, marginTop: 3 };
-const tooltipLabel: React.CSSProperties = { color: "#636366" };
-const tooltipValue: React.CSSProperties = { color: "#f2f2f7" };
+const tooltipLabel: React.CSSProperties = { color: tokens.muted };
+const tooltipValue: React.CSSProperties = { color: tokens.highlight };
 
 type Props = {
   turns: Turn[];
@@ -140,30 +141,30 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
 
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={data} margin={{ top: 24, right: 48, bottom: 32, left: 0 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="#2c2c2e" />
+          <CartesianGrid strokeDasharray="3 3" stroke={tokens.surface2} />
           <XAxis
             dataKey="ctxPct"
             type="number"
             domain={[0, xMax]}
             tickFormatter={(v) => `${v}%`}
-            stroke="#48484a"
-            tick={{ fill: "#636366", fontSize: 11 }}
-            label={{ value: "context utilisation", position: "insideBottom", offset: -12, fill: "#48484a", fontSize: 11 }}
+            stroke={tokens.border}
+            tick={{ fill: tokens.muted, fontSize: tokens.fsLabel }}
+            label={{ value: "context utilisation", position: "insideBottom", offset: -12, fill: tokens.border, fontSize: tokens.fsLabel }}
           />
           <YAxis
             domain={[0, 1]}
             tickFormatter={(v) => v.toFixed(1)}
-            stroke="#48484a"
-            tick={{ fill: "#636366", fontSize: 11 }}
-            label={{ value: cfg.yLabel, angle: -90, position: "insideLeft", offset: 12, fill: "#48484a", fontSize: 11 }}
+            stroke={tokens.border}
+            tick={{ fill: tokens.muted, fontSize: tokens.fsLabel }}
+            label={{ value: cfg.yLabel, angle: -90, position: "insideLeft", offset: 12, fill: tokens.border, fontSize: tokens.fsLabel }}
           />
           <Tooltip content={<CustomTooltip metric={metric} />} />
 
           {/* Zone threshold markers */}
-          <ReferenceLine x={60} stroke={GC_COLOR.soft_gc} strokeDasharray="4 3" strokeOpacity={0.6}
-            label={{ value: "Soft GC", position: "top", fill: GC_COLOR.soft_gc, fontSize: 10 }} />
-          <ReferenceLine x={80} stroke={GC_COLOR.hard_gc} strokeDasharray="4 3" strokeOpacity={0.6}
-            label={{ value: "Hard GC", position: "top", fill: GC_COLOR.hard_gc, fontSize: 10 }} />
+          <ReferenceLine x={60} stroke={GC_TEXT.soft_gc} strokeDasharray="4 3" strokeOpacity={0.6}
+            label={{ value: "Soft GC", position: "top", fill: GC_TEXT.soft_gc, fontSize: 10 }} />
+          <ReferenceLine x={80} stroke={GC_TEXT.hard_gc} strokeDasharray="4 3" strokeOpacity={0.6}
+            label={{ value: "Hard GC", position: "top", fill: GC_TEXT.hard_gc, fontSize: 10 }} />
 
           {/* GC event annotations — actual session crossings */}
           {(() => {
@@ -201,8 +202,9 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
     display: "flex",
     flexDirection: "column",
-    padding: "16px 24px",
+    padding: `${tokens.sp4}px ${tokens.sp6}px`,
     overflow: "hidden",
+    background: tokens.surface0,
   },
   titleRow: {
     display: "flex",
@@ -211,41 +213,41 @@ const styles: Record<string, React.CSSProperties> = {
     marginBottom: 10,
   },
   title: {
-    fontSize: 13,
+    fontSize: tokens.fsBody,
     fontWeight: 600,
-    color: "#aeaeb2",
-    fontFamily: "monospace",
+    color: tokens.text,
+    fontFamily: tokens.fontMono,
   },
   metricTabs: {
     display: "flex",
-    gap: 4,
+    gap: tokens.sp1,
   },
   metricTab: {
     padding: "3px 10px",
-    fontSize: 11,
-    fontFamily: "monospace",
+    fontSize: tokens.fsLabel,
+    fontFamily: tokens.fontMono,
     background: "transparent",
-    border: "1px solid #2c2c2e",
-    borderRadius: 4,
-    color: "#48484a",
+    border: `1px solid ${tokens.surface2}`,
+    borderRadius: tokens.radiusSm,
+    color: tokens.muted,
     cursor: "pointer",
   },
   metricTabActive: {
-    background: "#1c1c1e",
+    background: tokens.surface1,
   },
   legend: {
     display: "flex",
     alignItems: "center",
     gap: 20,
-    marginBottom: 12,
+    marginBottom: tokens.sp3,
     flexWrap: "wrap" as const,
   },
   legendItem: {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    fontSize: 11,
-    color: "#636366",
+    fontSize: tokens.fsLabel,
+    color: tokens.muted,
   },
   legendDot: {
     width: 8,
@@ -258,7 +260,8 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    color: "#48484a",
-    fontSize: 13,
+    color: tokens.muted,
+    fontSize: tokens.fsBody,
+    fontFamily: tokens.fontMono,
   },
 };

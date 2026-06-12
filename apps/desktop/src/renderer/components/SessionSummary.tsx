@@ -1,40 +1,41 @@
 import React, { useMemo } from "react";
-import { Turn, GCEvent, GC_COLOR } from "../types.js";
+import { Turn, GCEvent, GC_TEXT } from "../types.js";
 import { computeQuality, deriveStats } from "../quality.js";
+import { tokens } from "../theme.js";
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
     display: "flex",
     gap: 0,
-    borderBottom: "1px solid #2c2c2e",
-    background: "#0d0d0f",
+    borderBottom: `0.5px solid ${tokens.border}`,
+    background: tokens.void,
     flexShrink: 0,
   },
   stat: {
     flex: 1,
-    padding: "10px 20px",
-    borderRight: "1px solid #1c1c1e",
+    padding: `${tokens.sp2}px ${tokens.sp6}px`,
+    borderRight: `0.5px solid ${tokens.surface1}`,
   },
   label: {
-    fontSize: 10,
-    color: "#48484a",
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
-    marginBottom: 4,
-    fontFamily: "monospace",
+    marginBottom: tokens.sp1,
+    fontFamily: tokens.fontMono,
   },
   value: {
-    fontSize: 15,
+    fontSize: tokens.fsSection,
     fontWeight: 600,
-    fontFamily: "monospace",
+    fontFamily: tokens.fontMono,
     fontVariantNumeric: "tabular-nums",
     lineHeight: 1,
     marginBottom: 3,
   },
   sub: {
-    fontSize: 10,
-    color: "#48484a",
-    fontFamily: "monospace",
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
+    fontFamily: tokens.fontMono,
   },
 };
 
@@ -64,16 +65,16 @@ export function SessionSummary({ turns, gcEvents }: Props) {
         : "→";
   const trendColor =
     stats.recentTrend === "rising"
-      ? GC_COLOR.clean
+      ? GC_TEXT.clean
       : stats.recentTrend === "declining"
-        ? GC_COLOR.hard_gc
-        : "#aeaeb2";
+        ? GC_TEXT.hard_gc
+        : tokens.text;
   const deltaColor =
     stats.qualityDelta >= 0
-      ? GC_COLOR.clean
+      ? GC_TEXT.clean
       : stats.qualityDelta < -0.2
-        ? GC_COLOR.hard_gc
-        : GC_COLOR.soft_gc;
+        ? GC_TEXT.hard_gc
+        : GC_TEXT.soft_gc;
 
   const items: {
     label: string;
@@ -92,7 +93,7 @@ export function SessionSummary({ turns, gcEvents }: Props) {
         stats.inflectionCtxPct != null
           ? `${Math.min(stats.inflectionCtxPct, 100).toFixed(1)}% ctx`
           : "none detected",
-      color: stats.inflectionCtxPct != null ? GC_COLOR.soft_gc : "#48484a",
+      color: stats.inflectionCtxPct != null ? GC_TEXT.soft_gc : tokens.muted,
       sub:
         stats.inflectionCtxPct != null
           ? "sustained quality drop"
@@ -107,9 +108,9 @@ export function SessionSummary({ turns, gcEvents }: Props) {
       color:
         stats.firstGCCtxPct != null
           ? stats.firstGCType === "hard_gc"
-            ? GC_COLOR.hard_gc
-            : GC_COLOR.soft_gc
-          : "#48484a",
+            ? GC_TEXT.hard_gc
+            : GC_TEXT.soft_gc
+          : tokens.muted,
       sub: stats.firstGCType ?? "session stayed clean",
     },
     {
@@ -120,25 +121,19 @@ export function SessionSummary({ turns, gcEvents }: Props) {
     },
     {
       label: "Trajectory",
-      value: stats.recentTrend === "declining" && stats.turnsToInflection != null
-        ? `↓ ~${stats.turnsToInflection} turns`
-        : `${trendSymbol} ${stats.recentTrend}`,
+      value: `${trendSymbol} ${stats.recentTrend}`,
       color: trendColor,
-      sub: stats.recentTrend === "declining"
-        ? stats.turnsToInflection != null
-          ? "est. turns to quality floor"
-          : "degrading now"
-        : "last 10 turns",
+      sub: "last 10 turns",
     },
     {
       label: "Marginal density",
       value: `${stats.avgMarginalDensity}x`,
       color:
         stats.avgMarginalDensity > 50
-          ? GC_COLOR.hard_gc
+          ? GC_TEXT.hard_gc
           : stats.avgMarginalDensity > 20
-            ? GC_COLOR.soft_gc
-            : GC_COLOR.clean,
+            ? GC_TEXT.soft_gc
+            : GC_TEXT.clean,
       sub: "avg new ctx / output tok",
     },
     {
@@ -154,7 +149,7 @@ export function SessionSummary({ turns, gcEvents }: Props) {
       {items.map((item) => (
         <div key={item.label} style={styles.stat}>
           <div style={styles.label}>{item.label}</div>
-          <div style={{ ...styles.value, color: item.color ?? "#f2f2f7" }}>
+          <div style={{ ...styles.value, color: item.color ?? tokens.highlight }}>
             {item.value}
           </div>
           {item.sub && <div style={styles.sub}>{item.sub}</div>}

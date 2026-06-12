@@ -1,8 +1,9 @@
 import React, { useState, useRef, useCallback } from "react";
-import { SessionRow, GCEvent, GC_COLOR, gcState } from "../types.js";
+import { SessionRow, GCEvent, GC_TEXT, gcState } from "../types.js";
 import { SessionDetail } from "../types.js";
 import { EfficiencyCurve } from "./EfficiencyCurve.js";
 import { SessionSummary } from "./SessionSummary.js";
+import { tokens } from "../theme.js";
 
 interface Props {
   session: SessionRow;
@@ -45,7 +46,7 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
 
   const pct = session.current_ctx_pct ?? 0;
   const state = gcState(pct);
-  const color = GC_COLOR[state];
+  const textColor = GC_TEXT[state];
 
   return (
     <div style={{ ...styles.panel, height }}>
@@ -56,14 +57,16 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
 
       {/* Compact session header */}
       <div style={styles.header}>
-        <span style={{ ...styles.dot, background: color }} />
+        <span className={`gc-dot gc-dot--${state}`} />
         <span style={styles.sessionName}>{session.name ?? "unnamed"}</span>
         <span style={styles.sessionId}>{session.id.slice(0, 8)}</span>
-        <span style={{ ...styles.ctxBadge, color }}>
+        <span style={{ ...styles.ctxBadge, color: textColor }}>
           {(Math.min(1, pct) * 100).toFixed(1)}% ctx
         </span>
-        <span style={styles.turns}>{session.turn_count} turns</span>
-        <span style={styles.model}>{session.model.replace("claude-", "")}</span>
+        <span style={styles.meta}>{session.turn_count} turns</span>
+        <span style={{ ...styles.meta, marginLeft: "auto" }}>
+          {session.model.replace("claude-", "")}
+        </span>
         <button style={styles.close} onClick={onClose}>
           ✕
         </button>
@@ -84,8 +87,8 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
 
 const styles: Record<string, React.CSSProperties> = {
   panel: {
-    borderTop: "1px solid #2c2c2e",
-    background: "#0d0d0f",
+    borderTop: `0.5px solid ${tokens.border}`,
+    background: tokens.void,
     display: "flex",
     flexDirection: "column",
     flexShrink: 0,
@@ -97,68 +100,56 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-    background: "#111113",
-    borderBottom: "1px solid #1c1c1e",
+    background: tokens.surface0,
+    borderBottom: `0.5px solid ${tokens.surface1}`,
     flexShrink: 0,
   },
   handleGrip: {
     width: 32,
     height: 2,
     borderRadius: 1,
-    background: "#3a3a3c",
+    background: tokens.border,
   },
   header: {
     display: "flex",
     alignItems: "center",
-    gap: 10,
-    padding: "6px 20px",
-    borderBottom: "1px solid #2c2c2e",
-    background: "#111113",
-    flexShrink: 0,
-  },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: "50%",
+    gap: tokens.sp2,
+    padding: `6px ${tokens.sp6}px`,
+    borderBottom: `0.5px solid ${tokens.border}`,
+    background: tokens.surface0,
     flexShrink: 0,
   },
   sessionName: {
-    fontSize: 13,
+    fontSize: tokens.fsBody,
     fontWeight: 600,
-    fontFamily: "monospace",
-    color: "#f2f2f7",
+    fontFamily: tokens.fontMono,
+    color: tokens.highlight,
   },
   sessionId: {
-    fontSize: 10,
-    fontFamily: "monospace",
-    color: "#3a3a3c",
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
+    color: tokens.border,
   },
   ctxBadge: {
-    fontSize: 12,
+    fontSize: tokens.fsData,
     fontWeight: 600,
-    fontFamily: "monospace",
+    fontFamily: tokens.fontMono,
     fontVariantNumeric: "tabular-nums",
   },
-  turns: {
-    fontSize: 11,
-    fontFamily: "monospace",
-    color: "#48484a",
-  },
-  model: {
-    fontSize: 11,
-    fontFamily: "monospace",
-    color: "#48484a",
-    marginLeft: "auto",
+  meta: {
+    fontSize: tokens.fsLabel,
+    fontFamily: tokens.fontMono,
+    color: tokens.muted,
   },
   close: {
     background: "transparent",
     border: "none",
-    color: "#48484a",
-    fontSize: 12,
+    color: tokens.muted,
+    fontSize: tokens.fsData,
     cursor: "pointer",
     padding: "2px 6px",
-    borderRadius: 4,
-    fontFamily: "monospace",
+    borderRadius: tokens.radiusSm,
+    fontFamily: tokens.fontMono,
   },
   body: {
     flex: 1,

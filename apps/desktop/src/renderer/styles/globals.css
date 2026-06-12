@@ -1,0 +1,25 @@
+@import './tokens.css';
+@import './gc-states.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--void);
+  color: var(--highlight);
+  font-family: var(--font-mono);
+  font-size: var(--fs-body);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Tabular nums on all numeric elements */
+[data-numeric],
+.tabular {
+  font-variant-numeric: tabular-nums;
+}

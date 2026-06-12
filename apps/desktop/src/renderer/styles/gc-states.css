@@ -1,0 +1,116 @@
+/* Claude OS — GC Semantic Colors + Animations
+   Hardcoded. Must render identically in all contexts. Never vary by theme. */
+
+:root {
+  /* Clean — ctx < 60% */
+  --gc-clean-dot:    #22C55E;
+  --gc-clean-text:   #4ADE80;
+  --gc-clean-bg:     #0A1F0F;
+  --gc-clean-border: #166534;
+
+  /* Soft GC — ctx 60–80% */
+  --gc-soft-dot:    #F59E0B;
+  --gc-soft-text:   #FBBF24;
+  --gc-soft-bg:     #1C1408;
+  --gc-soft-border: #92400E;
+
+  /* Hard GC — ctx > 80% */
+  --gc-hard-dot:    #EF4444;
+  --gc-hard-text:   #F87171;
+  --gc-hard-bg:     #1F0A0A;
+  --gc-hard-border: #991B1B;
+
+  /* Aged — closed / unresolved */
+  --gc-aged-dot:    #64748B;
+  --gc-aged-text:   #94A3B8;
+  --gc-aged-bg:     #111118;
+  --gc-aged-border: #334155;
+}
+
+@keyframes pulse-hard-gc {
+  0%, 100% { box-shadow: 0 0 4px #EF4444; }
+  50%       { box-shadow: 0 0 10px #EF4444; }
+}
+
+/* GC dot variants */
+.gc-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gc-dot--clean {
+  background: var(--gc-clean-dot);
+  box-shadow: 0 0 6px var(--gc-clean-dot);
+}
+
+.gc-dot--soft_gc {
+  background: var(--gc-soft-dot);
+}
+
+.gc-dot--hard_gc {
+  background: var(--gc-hard-dot);
+  animation: pulse-hard-gc 1.4s ease-in-out infinite;
+}
+
+.gc-dot--aged {
+  background: var(--gc-aged-dot);
+}
+
+/* GC row states */
+.gc-row--hard_gc {
+  background-color: var(--gc-hard-bg) !important;
+}
+
+.gc-row--aged {
+  opacity: 0.55;
+}
+
+/* GC chip (pill) — used in table rows, popovers, banners */
+.gc-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-family: var(--font-mono);
+  font-size: var(--fs-label);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  border: var(--stroke-base) solid transparent;
+  white-space: nowrap;
+}
+
+.gc-chip--clean {
+  color: var(--gc-clean-text);
+  background: var(--gc-clean-bg);
+  border-color: var(--gc-clean-border);
+}
+
+.gc-chip--soft_gc {
+  color: var(--gc-soft-text);
+  background: var(--gc-soft-bg);
+  border-color: var(--gc-soft-border);
+}
+
+.gc-chip--hard_gc {
+  color: var(--gc-hard-text);
+  background: var(--gc-hard-bg);
+  border-color: var(--gc-hard-border);
+  border-width: var(--stroke-alert);
+}
+
+.gc-chip--aged {
+  color: var(--gc-aged-text);
+  background: var(--gc-aged-bg);
+  border-color: var(--gc-aged-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gc-dot--hard_gc {
+    animation: none;
+  }
+}

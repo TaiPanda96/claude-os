@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { SessionRow, GC_COLOR, GCState, gcState } from "../types.js";
+import { SessionRow, GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
+import { tokens } from "../theme.js";
 
 type SortKey = "name" | "model" | "current_ctx_pct" | "turn_count" | "gc_state";
 type SortDir = "asc" | "desc";
@@ -11,7 +12,7 @@ interface Props {
 }
 
 const GC_LABEL: Record<GCState, string> = {
-  clean: "Clean",
+  clean:   "Clean",
   soft_gc: "Soft GC",
   hard_gc: "Hard GC",
 };
@@ -65,7 +66,7 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
           ...styles.th,
           textAlign: align,
           cursor: "pointer",
-          color: active ? "#aeaeb2" : "#48484a",
+          color: active ? tokens.text : tokens.border,
         }}
         onClick={() => handleSort(key)}
       >
@@ -91,24 +92,34 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
           {sorted.map((s) => {
             const pct = s.current_ctx_pct ?? 0;
             const state = gcState(pct);
-            const color = GC_COLOR[state];
+            const dotColor = GC_COLOR[state];
+            const textColor = GC_TEXT[state];
             const isSelected = s.id === selected;
+            const isHardGC = state === "hard_gc";
             const approxTokens = Math.round(pct * (s.ctx_window ?? 200_000));
+
+            const rowClass = isHardGC ? "gc-row--hard_gc" : undefined;
 
             return (
               <tr
                 key={s.id}
+                className={rowClass}
                 style={{
                   ...styles.row,
-                  ...(isSelected ? styles.rowSelected : {}),
+                  ...(isSelected && !isHardGC ? styles.rowSelected : {}),
                 }}
                 onClick={() => onSelect(s.id)}
               >
                 {/* Session name */}
                 <td style={styles.td}>
                   <div style={styles.sessionCell}>
-                    <span style={{ ...styles.dot, background: color }} />
-                    <span style={styles.sessionName}>
+                    <span className={`gc-dot gc-dot--${state}`} />
+                    <span
+                      style={{
+                        ...styles.sessionName,
+                        color: isHardGC ? GC_TEXT.hard_gc : tokens.highlight,
+                      }}
+                    >
                       {s.name ?? "unnamed"}
                     </span>
                     <span style={styles.sessionId}>{s.id.slice(0, 6)}</span>
@@ -129,7 +140,7 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                       style={{
                         ...styles.barFill,
                         width: `${Math.min(pct * 100, 100)}%`,
-                        background: color,
+                        background: dotColor,
                       }}
                     />
                     <div
@@ -157,7 +168,13 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
 
                 {/* CTX % */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span style={{ ...styles.mono, color, fontWeight: 600 }}>
+                  <span
+                    style={{
+                      ...styles.mono,
+                      color: textColor,
+                      fontWeight: 600,
+                    }}
+                  >
                     {Math.min(pct * 100, 100).toFixed(1)}%
                   </span>
                 </td>
@@ -167,16 +184,10 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                   <span style={styles.mono}>{s.turn_count}</span>
                 </td>
 
-                {/* GC State */}
+                {/* GC State chip */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span
-                    style={{
-                      ...styles.badge,
-                      background: `${color}18`,
-                      color,
-                      borderColor: `${color}40`,
-                    }}
-                  >
+                  <span className={`gc-chip gc-chip--${state}`}>
+                    <span className={`gc-dot gc-dot--${state}`} />
                     {GC_LABEL[state]}
                   </span>
                 </td>
@@ -197,7 +208,7 @@ const styles: Record<string, React.CSSProperties> = {
   container: {
     flex: 1,
     overflowY: "auto",
-    background: "#0d0d0f",
+    background: tokens.void,
   },
   table: {
     width: "100%",
@@ -205,71 +216,64 @@ const styles: Record<string, React.CSSProperties> = {
     tableLayout: "fixed",
   },
   headerRow: {
-    borderBottom: "1px solid #2c2c2e",
+    borderBottom: `0.5px solid ${tokens.border}`,
     position: "sticky",
     top: 0,
-    background: "#111113",
+    background: tokens.surface0,
     zIndex: 1,
   },
   th: {
     padding: "10px 16px",
-    fontSize: 10,
-    fontWeight: 600,
-    letterSpacing: "0.08em",
+    fontSize: tokens.fsMicro,
+    fontWeight: 500,
+    letterSpacing: "0.06em",
     textTransform: "uppercase" as const,
-    color: "#48484a",
-    fontFamily: "monospace",
+    color: tokens.border,
+    fontFamily: tokens.fontMono,
     userSelect: "none" as const,
   },
   row: {
-    borderBottom: "1px solid #1c1c1e",
+    borderBottom: `0.5px solid ${tokens.surface1}`,
     cursor: "pointer",
-    transition: "background 0.1s",
+    transition: "background 0.2s",
   },
   rowSelected: {
-    background: "#1a1a2e",
+    background: tokens.surface2,
   },
   td: {
-    padding: "10px 16px",
+    padding: "8px 16px",
     verticalAlign: "middle",
   },
   sessionCell: {
     display: "flex",
     alignItems: "center",
-    gap: 8,
-  },
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: "50%",
-    flexShrink: 0,
+    gap: tokens.sp2,
   },
   sessionName: {
-    color: "#f2f2f7",
-    fontSize: 13,
+    fontSize: tokens.fsBody,
     fontWeight: 500,
-    fontFamily: "monospace",
+    fontFamily: tokens.fontMono,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap" as const,
   },
   sessionId: {
-    color: "#3a3a3c",
-    fontSize: 10,
-    fontFamily: "monospace",
+    color: tokens.border,
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
     flexShrink: 0,
   },
   mono: {
-    color: "#aeaeb2",
-    fontSize: 12,
-    fontFamily: "monospace",
+    color: tokens.text,
+    fontSize: tokens.fsData,
+    fontFamily: tokens.fontMono,
     fontVariantNumeric: "tabular-nums",
   },
   barTrack: {
     position: "relative",
-    height: 4,
-    background: "#2c2c2e",
-    borderRadius: 2,
+    height: 3,
+    background: tokens.surface2,
+    borderRadius: 999,
     overflow: "hidden",
     marginBottom: 3,
   },
@@ -278,7 +282,7 @@ const styles: Record<string, React.CSSProperties> = {
     top: 0,
     left: 0,
     height: "100%",
-    borderRadius: 2,
+    borderRadius: 999,
     transition: "width 0.4s ease",
     zIndex: 1,
   },
@@ -289,24 +293,15 @@ const styles: Record<string, React.CSSProperties> = {
     height: "100%",
   },
   barTokens: {
-    color: "#3a3a3c",
-    fontSize: 10,
-    fontFamily: "monospace",
-  },
-  badge: {
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: 4,
-    fontSize: 11,
-    fontWeight: 600,
-    fontFamily: "monospace",
-    border: "1px solid",
+    color: tokens.muted,
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
   },
   empty: {
     padding: 32,
     textAlign: "center" as const,
-    color: "#48484a",
-    fontSize: 13,
-    fontFamily: "monospace",
+    color: tokens.muted,
+    fontSize: tokens.fsBody,
+    fontFamily: tokens.fontMono,
   },
 };
