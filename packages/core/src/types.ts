@@ -127,3 +127,93 @@ export function computeGCState(ctxPct: number): GCState {
   if (ctxPct >= GC_THRESHOLDS.soft) return "soft_gc";
   return "clean";
 }
+
+// ── Phase 4: policy-driven compaction ────────────────────────────────────────
+
+export interface Project {
+  id: string;
+  cwd: string;
+  name: string;
+  createdAt: number;
+}
+
+export enum TriggerTypeEnum {
+  TURN_CADENCE           = "turn_cadence",
+  CTX_THRESHOLD          = "ctx_threshold",
+  SEMANTIC_EVENT         = "semantic_event",
+  ARCHITECTURAL_DECISION = "architectural_decision",
+  OUTCOME_RESOLVED       = "outcome_resolved",
+  COMBINED               = "combined",
+  MANUAL                 = "manual",
+}
+
+export type TriggerConfig =
+  | { triggerType: TriggerTypeEnum.TURN_CADENCE; every: number }
+  | { triggerType: TriggerTypeEnum.CTX_THRESHOLD; pct: number }
+  | {
+      triggerType: TriggerTypeEnum.SEMANTIC_EVENT;
+      classifier: string;
+      min_ctx_pct: number;   // default 20
+      min_turns: number;     // default 5
+    }
+  | {
+      triggerType: TriggerTypeEnum.ARCHITECTURAL_DECISION;
+      min_ctx_pct: number;   // default 20
+      min_turns: number;     // default 5
+    }
+  | {
+      triggerType: TriggerTypeEnum.OUTCOME_RESOLVED;
+      min_ctx_pct: number;   // default 10
+      min_turns: number;     // default 5
+    }
+  | {
+      triggerType: TriggerTypeEnum.COMBINED;
+      triggers: Exclude<TriggerConfig, { triggerType: TriggerTypeEnum.COMBINED }>[];
+      mode: "any" | "all";
+    };
+
+export type UpdateMode = "overwrite" | "append" | "merge";
+export type DecayScope  = "session" | "project" | "permanent";
+
+export interface MemoryFile {
+  filename:    string;
+  description: string;
+  update_mode: UpdateMode;
+  decay:       DecayScope;
+  max_tokens?: number;   // default 8000; merge existing file capped separately at 4000
+}
+
+export interface CompactionPolicy {
+  id:             string;
+  project_id:     string;
+  name:           string;
+  active:         boolean;
+  triggers:       TriggerConfig[];
+  memory_schema:  MemoryFile[];
+  cooldown_turns: number;   // default 2
+  created_at:     string;
+  updated_at:     string;
+}
+
+export type CompactionStatus = "running" | "completed" | "failed";
+
+export interface CompactionFileResult {
+  filename:      string;
+  update_mode:   UpdateMode;
+  bytes_written: number;
+  preview:       string;   // first 200 chars
+}
+
+export interface CompactionEvent {
+  id:                string;
+  session_id:        string;
+  policy_id:         string;
+  triggered_by:      TriggerTypeEnum;
+  trigger_detail:    string;
+  files_written:     CompactionFileResult[];
+  tokens_at_trigger: number;
+  status:            CompactionStatus;
+  started_at:        string;
+  completed_at:      string | null;
+  error:             string | null;
+}
