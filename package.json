@@ -9,6 +9,7 @@
     "apps/*"
   ],
   "scripts": {
+    "dev": "bun run --cwd apps/desktop dev",
     "dev:core": "bun run --cwd packages/core dev",
     "dev:server": "bun run --cwd packages/server dev",
     "dev:desktop": "bun run --cwd apps/desktop dev",
@@ -16,7 +17,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && bun run --cwd packages/core typecheck && bun run --cwd packages/server typecheck && bun run --cwd apps/desktop typecheck",
     "ingest": "bun run scripts/ingest.ts",
     "ingest:stats": "bun run scripts/ingest.ts --stats",
-    "ingest:verbose": "bun run scripts/ingest.ts --verbose"
+    "ingest:verbose": "bun run scripts/ingest.ts --verbose",
+    "export": "bun run scripts/export.ts"
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",

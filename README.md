@@ -2,7 +2,7 @@
 
 > A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state tracking — before quality degrades.
 
-![Phase](https://img.shields.io/badge/phase-0%20%E2%80%94%20proof%20of%20concept-34c759?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-3%20%E2%80%94%20compaction%20engine-34c759?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 ![Built with](https://img.shields.io/badge/built%20with-TypeScript%20%2B%20Swift-orange?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active%20development-yellow?style=flat-square)
@@ -21,7 +21,7 @@ Claude OS makes it visible, measurable, and actionable.
 
 ## What it does
 
-- **Instruments** every Claude API call — captures input tokens, output tokens, cumulative context, latency, and stop reason per turn
+- **Instruments** Claude Code sessions via hooks — captures input tokens, output tokens, cumulative context, latency, and stop reason per turn
 - **Computes** a session-level context utilisation percentage in real time
 - **Tracks** a quality proxy signal (output density, latency, self-correction markers) per turn
 - **Plots** the efficiency curve per session — showing exactly where quality inflects
@@ -49,14 +49,14 @@ Transitions are one-way within a session. A forked session starts Clean.
 ```
 claude-os/
 ├── packages/
-│   ├── core/          TypeScript instrumentation wrapper + SQLite schema
-│   ├── server/        Hono local server (localhost:7842)
-│   ├── app/           Electron + React activity monitor window
+│   ├── core/          TypeScript ingestion, SQLite schema, DB access layer
+│   ├── server/        Hono API server (localhost:7842)
 │   └── mcp/           MCP server — Claude reads its own context health
 ├── apps/
+│   ├── desktop/       Electron + React activity monitor window
 │   └── menu-bar/      Swift + AppKit menu bar sprite
+├── scripts/           Bulk ingest, export, and Claude Code hook
 ├── analysis/          Phase 0 notebooks — efficiency curve empirics
-├── site/              Splash page (served via GitHub Pages)
 └── docs/              Architecture, compaction templates, research notes
 ```
 
@@ -65,63 +65,28 @@ claude-os/
 | Layer | Choice |
 |---|---|
 | Runtime | Bun |
-| Instrumentation | TypeScript + Anthropic SDK |
+| Session capture | Claude Code hooks (JSONL transcripts) |
 | Local store | SQLite via `better-sqlite3` + Drizzle ORM |
 | Local server | Hono |
 | Menu bar | Swift + AppKit (`NSStatusItem`) |
 | Main window | Electron + React + Vite |
-| Charts | Recharts → D3 |
+| Charts | Recharts |
 | State | Zustand |
 | Compaction LLM | Claude Sonnet |
 | MCP server | `@modelcontextprotocol/sdk` |
 
 ---
 
-## Roadmap
-
-### Phase 0 — Proof of Concept `← current`
-- [ ] Anthropic Messages API wrapper — per-turn token capture
-- [ ] Session-level context utilisation % in real time
-- [ ] Quality proxy logging: output length, latency, self-correction rate
-- [ ] SQLite store + post-hoc efficiency curve notebook
-- [ ] Empirical identification of quality inflection point across 10–20 sessions
-
-### Phase 1 — Menu Bar Sprite
-- [ ] macOS menu bar app — Swift / AppKit `NSStatusItem`
-- [ ] Real-time context depth indicator, colour-coded GC state
-- [ ] Native `UNUserNotificationCenter` alerts at threshold crossings
-- [ ] Configurable GC threshold (default: 80%)
-
-### Phase 2 — Activity Monitor Window
-- [ ] Full panel: sortable session list, live efficiency curve chart
-- [ ] Electron + React, IPC to SQLite, macOS vibrancy
-- [ ] Turn-by-turn token breakdown, GC event log
-
-### Phase 3 — Compaction Engine
-- [ ] One-click Compact & Fork action
-- [ ] Smart compaction prompt templates per project type
-- [ ] Persistent memory export → markdown / `CLAUDE.md` append
-
-### Phase 4 — Outcomes Layer
-- [ ] User-configurable outcome definitions per session type
-- [ ] Cost-per-outcome reporting (API spend / resolved outcomes)
-- [ ] Stalled session detection + escalation
-
-### Phase 5 — Public Release
-- [ ] MCP server — Claude reads its own context health in real time
-- [ ] Empirical research write-up: efficiency curves across session types
-- [ ] `brew install claude-os`
-
----
-
 ## Getting started
 
-> Phase 0 is in active development. The instrumentation wrapper is not yet published. Instructions will be updated as each phase ships.
+> Full setup details are in [RUNBOOK.md](./RUNBOOK.md). This is the short path.
 
 **Prerequisites**
 
 - [Bun](https://bun.sh) ≥ 1.1
-- An Anthropic API key
+- [Node.js](https://nodejs.org) ≥ 20 (required by Electron)
+- [Claude Code CLI](https://claude.ai/code) — installed and active
+- macOS (Electron tray and notifications are macOS-only)
 
 ```bash
 git clone https://github.com/TaiPanda96/claude-os.git
@@ -129,20 +94,55 @@ cd claude-os
 bun install
 ```
 
-**Run the instrumentation wrapper**
+**1. Wire the Claude Code hook**
 
-```bash
-cd packages/core
-cp .env.example .env        # add your ANTHROPIC_API_KEY
-bun run src/wrapper.ts
+Claude OS captures session data via Claude Code's `stop` hook. Add this to `~/.claude/settings.json`:
+
+```json
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /absolute/path/to/claude-os/scripts/hook-stop.ts"
+          }
+        ]
+      }
+    ]
+  }
+}
 ```
 
-**View the efficiency curve**
+Replace `/absolute/path/to/claude-os` with the path to your clone. Every Claude Code session that ends will now write its turn data to `claude-os.sqlite` at the repo root.
+
+**2. Ingest existing sessions (optional)**
+
+If you have existing Claude Code sessions to analyse:
 
 ```bash
-cd analysis
-jupyter notebook efficiency_curve.ipynb
+bun run ingest          # bulk ingest from ~/.claude/projects/
+bun run export          # export sessions as JSON → analysis/sessions/
 ```
+
+**3. Start the activity monitor**
+
+```bash
+bun run dev
+```
+
+This runs four processes concurrently — Hono API server (`:7842`), Vite renderer (`:5173`), TypeScript watch, and Electron. The tray icon appears in your macOS menu bar; left-click to open the activity monitor window.
+
+**Verify the server is up:**
+
+```bash
+curl http://localhost:7842/health
+# {"status":"ok","version":"0.1.0"}
+```
+
+See [RUNBOOK.md](./RUNBOOK.md) for troubleshooting, environment variables, and TypeScript conventions.
 
 ---
 
@@ -164,11 +164,54 @@ outcomes(id, session_id, label, resolved, resolved_at)
 
 ---
 
+## Roadmap
+
+### Phase 0 — Proof of Concept `✓`
+- [x] Claude Code hook — per-turn token capture via JSONL transcripts
+- [x] Session-level context utilisation % computed from cumulative tokens
+- [x] Quality proxy logging: output length, latency, self-correction rate
+- [x] SQLite store + post-hoc efficiency curve notebook
+- [x] Empirical identification of quality inflection point across real sessions
+
+### Phase 1 — Menu Bar Sprite `✓`
+- [x] macOS menu bar app — Swift / AppKit `NSStatusItem`
+- [x] Real-time context depth indicator, colour-coded GC state
+- [x] Native `UNUserNotificationCenter` alerts at threshold crossings
+- [x] Configurable GC threshold (default: 80%)
+
+### Phase 2 — Activity Monitor Window `✓`
+- [x] Full panel: sortable session list, live efficiency curve chart
+- [x] Electron + React, IPC to SQLite, macOS vibrancy
+- [x] Turn-by-turn token breakdown, GC event log
+
+### Phase 3 — Compaction Engine `← current`
+- [ ] One-click Compact & Fork action
+- [ ] Smart compaction prompt templates per project type
+- [ ] Persistent memory export → markdown / `CLAUDE.md` append
+
+### Phase 4 — Outcomes Layer
+- [ ] User-configurable outcome definitions per session type
+- [ ] Cost-per-outcome reporting (API spend / resolved outcomes)
+- [ ] Stalled session detection + escalation
+
+### Phase 5 — Public Release
+- [ ] MCP server — Claude reads its own context health in real time
+- [ ] Empirical research write-up: efficiency curves across session types
+- [ ] `brew install claude-os`
+
+---
+
 ## Contributing
 
-This project is in early research phase. If you're interested in contributing to the efficiency curve empirics (Phase 0) or have data on context quality degradation across session types, open an issue.
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for code style, commit conventions, and how to open a PR.
 
-For everything else — bug reports, feature ideas, research notes — issues are open.
+Phase 3 is the active work surface. The most useful contributions right now:
+
+- **Compaction prompt templates** — project-type-aware prompts that produce good `CLAUDE.md` seeds
+- **Quality proxy improvements** — better signal for output density or self-correction detection
+- **Cross-platform feedback** — the hook and ingest pipeline should work on Linux; reports welcome
+
+Issues are open. No Discord.
 
 ---
 
@@ -184,4 +227,4 @@ MIT © [Tai Lin](https://github.com/TaiPanda96)
 
 ---
 
-*Built in Toronto. Phase 0 — June 2026.*
+*Built in Toronto. Phase 3 — June 2026.*
