@@ -68,3 +68,6 @@ docs/design-system/
 /claude-os.sqlite*
 /claude-os.sqlite-shm
 /claude-os.sqlite-wal
+
+# Specs
+docs/specs/
