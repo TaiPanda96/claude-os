@@ -120,9 +120,15 @@ export function SessionSummary({ turns, gcEvents }: Props) {
     },
     {
       label: "Trajectory",
-      value: `${trendSymbol} ${stats.recentTrend}`,
+      value: stats.recentTrend === "declining" && stats.turnsToInflection != null
+        ? `↓ ~${stats.turnsToInflection} turns`
+        : `${trendSymbol} ${stats.recentTrend}`,
       color: trendColor,
-      sub: "last 10 turns",
+      sub: stats.recentTrend === "declining"
+        ? stats.turnsToInflection != null
+          ? "est. turns to quality floor"
+          : "degrading now"
+        : "last 10 turns",
     },
     {
       label: "Marginal density",

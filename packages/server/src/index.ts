@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { getDb, getSession, getSessionTurns } from "@claude-os/core";
+import { getDb, getSession, getSessionTurns, computeSessionHealthStats } from "@claude-os/core";
 
 /**
  * The main server entry point for the Claude OS application. This server provides API endpoints for managing sessions, turns, and garbage collection events.
@@ -36,6 +36,15 @@ app.get("/sessions/:id", (c) => {
   if (!session) return c.json({ error: "not found" }, 404);
   const turns = getSessionTurns(db, session.id);
   return c.json({ session, turns });
+});
+
+app.get("/sessions/:id/health", (c) => {
+  const db = getDb();
+  const session = getSession(db, c.req.param("id"));
+  if (!session) return c.json({ error: "not found" }, 404);
+  const turns = getSessionTurns(db, session.id);
+  const stats = computeSessionHealthStats(turns);
+  return c.json(stats);
 });
 
 app.get("/sessions/:id/gc-events", (c) => {
