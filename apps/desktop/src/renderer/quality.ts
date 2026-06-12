@@ -32,9 +32,9 @@ function normalize(values: number[]): number[] {
 // to 1.0, making it look identical to a strong session that peaks at 0.34.
 const OUTPUT_DENSITY_ANCHOR = 0.4;
 
-// self_correction_count is a raw occurrence count (see countSelfCorrections), not [0,1].
-// A soft ceiling of 5 preserves magnitude — a turn with 3 corrections scores worse than
-// one with 1 — while keeping the contribution bounded. Clamping at 1 would make it binary.
+// self_correction_count is a raw occurrence count (16 marker phrases, see countSelfCorrections).
+// Dividing by a soft ceiling preserves magnitude — 3 corrections penalises more than 1.
+// Ceiling of 5 is conservative given 16 markers; clamp handles any outlier above it.
 const SELF_CORRECTION_ANCHOR = 5;
 
 export function computeQuality(turns: Turn[]): ChartPoint[] {
@@ -126,15 +126,26 @@ export function deriveStats(
   const eligible = points.slice(Math.min(3, points.length - 1));
   const peak = eligible.reduce((best, p) => p.quality > best.quality ? p : best, eligible[0]!);
 
-  // Inflection — 5-turn trailing avg drops ≥15% below peak
+  // Inflection — rolling linear regression, matching the notebook's find_inflection().
+  // Window = max(3, n/5) turns. First ctx_pct where slope is negative two windows in a row.
   let inflectionCtxPct: number | null = null;
-  const peakIdx = points.indexOf(peak);
-  for (let i = peakIdx + 5; i < points.length; i++) {
-    const window = points.slice(i - 5, i);
-    const avg = window.reduce((s, p) => s + p.quality, 0) / window.length;
-    if (peak.quality - avg >= 0.15 * peak.quality) {
-      inflectionCtxPct = points[i]!.ctxPct;
-      break;
+  if (points.length >= 6) {
+    const w = Math.max(3, Math.floor(points.length / 5));
+    let prevNeg = false;
+    for (let i = w; i < points.length; i++) {
+      const slice = points.slice(i - w, i);
+      const n = slice.length;
+      const sumX = slice.reduce((s, p) => s + p.ctxPct, 0);
+      const sumY = slice.reduce((s, p) => s + p.quality, 0);
+      const sumXY = slice.reduce((s, p) => s + p.ctxPct * p.quality, 0);
+      const sumX2 = slice.reduce((s, p) => s + p.ctxPct * p.ctxPct, 0);
+      const denom = n * sumX2 - sumX * sumX;
+      const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
+      if (slope < 0 && prevNeg) {
+        inflectionCtxPct = points[i - 1]!.ctxPct;
+        break;
+      }
+      prevNeg = slope < 0;
     }
   }
 
