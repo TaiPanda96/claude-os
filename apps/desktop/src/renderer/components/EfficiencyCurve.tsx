@@ -13,23 +13,38 @@ import { Turn, GCEvent, GC_COLOR, GC_TEXT } from "../types.js";
 import { ChartPoint, Metric, computeQuality } from "../quality.js";
 import { tokens } from "../theme.js";
 
-const METRIC_CONFIG: Record<Metric, { label: string; yLabel: string; description: string; color: string }> = {
+interface MetricMeta {
+  label: string;
+  signal: string;
+  formula: string;
+  watchFor: string;
+  yLabel: string;
+  color: string;
+}
+
+const METRIC_CONFIG: Record<Metric, MetricMeta> = {
   quality: {
-    label: "Quality",
-    yLabel: "quality proxy",
-    description: "0.5 × output density + 0.3 × (1 − self-correction) + 0.2 × (1 − repetition)",
-    color: "#636366",
+    label: "Output Quality",
+    signal: "Is Claude degrading as context fills?",
+    formula: "0.5 × output density  +  0.3 × (1 − self-corrections)  +  0.2 × (1 − repetition)",
+    watchFor: "Sustained drops past 60% ctx — earlier the drop, the more context is hurting output",
+    yLabel: "quality score  [0–1]",
+    color: tokens.text,
   },
   marginalDensity: {
-    label: "Marginal Density",
-    yLabel: "new ctx tokens / output tokens",
-    description: "New context tokens introduced since last turn ÷ output tokens — cost of incremental context",
+    label: "Context Bloat Rate",
+    signal: "How fast is context inflating vs. useful output?",
+    formula: "new ctx tokens introduced this turn  ÷  output tokens produced",
+    watchFor: "Rising ratio → context growing faster than work — approaching diminishing returns",
+    yLabel: "ctx tokens per output token",
     color: "#bf5af2",
   },
   workEfficiency: {
-    label: "Work Efficiency",
+    label: "Token Cost / Artifact",
+    signal: "Are meaningful turns getting more expensive to produce?",
+    formula: "cumulative tokens consumed  ÷  high-output turns produced (running total)",
+    watchFor: "Steadily rising curve = GC pressure — each useful turn costs more tokens than the last",
     yLabel: "tokens per artifact",
-    description: "Cumulative tokens consumed ÷ high-output turns produced — rising curve = context bloat",
     color: "#0a84ff",
   },
 };
@@ -57,16 +72,16 @@ function CustomTooltip({ active, payload, metric }: any) {
         <span style={tooltipValue}>{d.quality.toFixed(2)}</span>
       </div>
       <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.marginalDensity.color }}>marginal density</span>
+        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.marginalDensity.color }}>context bloat rate</span>
         <span style={tooltipValue}>
           {d.marginalDensityRaw.toFixed(1)}x
           <span style={{ color: tokens.muted, marginLeft: 4 }}>({d.marginalDensity.toFixed(2)})</span>
         </span>
       </div>
       <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>work efficiency</span>
+        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>token cost / artifact</span>
         <span style={tooltipValue}>
-          {d.workEfficiencyRaw.toLocaleString()} tok/artifact
+          {d.workEfficiencyRaw.toLocaleString()} tok
           <span style={{ color: tokens.muted, marginLeft: 4 }}>({d.workEfficiency.toFixed(2)})</span>
         </span>
       </div>
@@ -107,23 +122,57 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
 
   return (
     <div style={styles.container}>
-      {/* Title + metric selector */}
-      <div style={styles.titleRow}>
-        <div style={styles.title}>
-          {sessionName ?? "Session"} — Context Efficiency Curve
-        </div>
-        <div style={styles.metricTabs}>
-          {(Object.keys(METRIC_CONFIG) as Metric[]).map((m) => (
+      {/* Title */}
+      <div style={styles.title}>
+        {sessionName ?? "Session"} — Context Efficiency Curve
+      </div>
+
+      {/* Metric selector — card tabs */}
+      <div style={styles.metricTabs}>
+        {(Object.keys(METRIC_CONFIG) as Metric[]).map((m) => {
+          const active = metric === m;
+          const mcfg = METRIC_CONFIG[m];
+          return (
             <button
               key={m}
-              title={METRIC_CONFIG[m].description}
-              style={{ ...styles.metricTab, ...(metric === m ? { ...styles.metricTabActive, color: METRIC_CONFIG[m].color, borderColor: METRIC_CONFIG[m].color } : {}) }}
+              style={{
+                ...styles.metricTab,
+                borderLeftColor: active ? mcfg.color : "transparent",
+                background: active ? tokens.surface2 : tokens.surface1,
+              }}
               onClick={() => setMetric(m)}
             >
-              {METRIC_CONFIG[m].label}
+              <span
+                style={{
+                  ...styles.metricTabLabel,
+                  color: active ? tokens.highlight : tokens.muted,
+                }}
+              >
+                {mcfg.label}
+              </span>
+              <span
+                style={{
+                  ...styles.metricTabSignal,
+                  color: active ? mcfg.color : tokens.border,
+                }}
+              >
+                {mcfg.signal}
+              </span>
             </button>
-          ))}
-        </div>
+          );
+        })}
+      </div>
+
+      {/* Signal bar — formula + what to watch for */}
+      <div style={styles.signalBar}>
+        <span style={styles.signalFormula}>
+          <span style={{ color: cfg.color, marginRight: 6 }}>ƒ</span>
+          {cfg.formula}
+        </span>
+        <span style={styles.signalWatch}>
+          <span style={{ color: tokens.muted, marginRight: 4 }}>Watch:</span>
+          {cfg.watchFor}
+        </span>
       </div>
 
       {/* GC state legend */}
@@ -134,9 +183,6 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
             {s === "clean" ? "Clean <60%" : s === "soft_gc" ? "Soft GC 60–80%" : "Hard GC >80%"}
           </span>
         ))}
-        <span style={{ ...styles.legendItem, marginLeft: "auto", color: cfg.color }}>
-          {cfg.description}
-        </span>
       </div>
 
       <ResponsiveContainer width="100%" height="100%">
@@ -202,56 +248,86 @@ const styles: Record<string, React.CSSProperties> = {
     minHeight: 0,
     display: "flex",
     flexDirection: "column",
-    padding: `${tokens.sp4}px ${tokens.sp6}px`,
+    padding: `${tokens.sp3}px ${tokens.sp6}px ${tokens.sp4}px`,
     overflow: "hidden",
     background: tokens.surface0,
-  },
-  titleRow: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
   },
   title: {
     fontSize: tokens.fsBody,
     fontWeight: 600,
-    color: tokens.text,
+    color: tokens.muted,
     fontFamily: tokens.fontMono,
+    marginBottom: tokens.sp2,
   },
   metricTabs: {
-    display: "flex",
-    gap: tokens.sp1,
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: tokens.sp2,
+    marginBottom: tokens.sp2,
   },
   metricTab: {
-    padding: "3px 10px",
-    fontSize: tokens.fsLabel,
-    fontFamily: tokens.fontMono,
-    background: "transparent",
-    border: `1px solid ${tokens.surface2}`,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    gap: 3,
+    padding: `${tokens.sp2}px ${tokens.sp3}px`,
     borderRadius: tokens.radiusSm,
-    color: tokens.muted,
+    borderLeft: `3px solid transparent`,
+    border: `1px solid ${tokens.surface2}`,
+    borderLeftWidth: 3,
     cursor: "pointer",
+    textAlign: "left" as const,
+    transition: "background 0.15s, border-color 0.15s",
+    fontFamily: tokens.fontMono,
   },
-  metricTabActive: {
+  metricTabLabel: {
+    fontSize: tokens.fsBody,
+    fontWeight: 600,
+    letterSpacing: "-0.01em",
+  },
+  metricTabSignal: {
+    fontSize: tokens.fsMicro,
+    lineHeight: 1.4,
+    fontStyle: "italic",
+  },
+  signalBar: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 2,
+    padding: `${tokens.sp2}px ${tokens.sp3}px`,
     background: tokens.surface1,
+    borderRadius: tokens.radiusSm,
+    marginBottom: tokens.sp2,
+    borderLeft: `1px solid ${tokens.border}`,
+  },
+  signalFormula: {
+    fontSize: tokens.fsMicro,
+    color: tokens.text,
+    fontFamily: tokens.fontMono,
+    letterSpacing: "0.01em",
+  },
+  signalWatch: {
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
+    fontFamily: tokens.fontMono,
   },
   legend: {
     display: "flex",
     alignItems: "center",
     gap: 20,
-    marginBottom: tokens.sp3,
-    flexWrap: "wrap" as const,
+    marginBottom: tokens.sp2,
   },
   legendItem: {
     display: "flex",
     alignItems: "center",
     gap: 6,
-    fontSize: tokens.fsLabel,
+    fontSize: tokens.fsMicro,
     color: tokens.muted,
+    fontFamily: tokens.fontMono,
   },
   legendDot: {
-    width: 8,
-    height: 8,
+    width: 7,
+    height: 7,
     borderRadius: "50%",
     flexShrink: 0,
   },
