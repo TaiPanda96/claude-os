@@ -20,7 +20,11 @@ export function App() {
       setSessions(data);
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Cannot reach server at localhost:7842");
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Cannot reach server at localhost:7842",
+      );
     }
   }, []);
 
@@ -65,7 +69,9 @@ export function App() {
       <div style={styles.error}>
         <div style={styles.errorIcon}>⚠</div>
         <div style={styles.errorText}>{error}</div>
-        <button style={styles.retryBtn} onClick={fetchSessions}>Retry</button>
+        <button style={styles.retryBtn} onClick={fetchSessions}>
+          Retry
+        </button>
       </div>
     );
   }

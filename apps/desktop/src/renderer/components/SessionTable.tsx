@@ -32,12 +32,26 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
   const sorted = [...sessions].sort((a, b) => {
     let av: string | number, bv: string | number;
     switch (sortKey) {
-      case "name":          av = a.name ?? ""; bv = b.name ?? ""; break;
-      case "model":         av = a.model; bv = b.model; break;
-      case "turn_count":    av = a.turn_count; bv = b.turn_count; break;
-      case "gc_state":      av = a.current_ctx_pct ?? 0; bv = b.current_ctx_pct ?? 0; break;
+      case "name":
+        av = a.name ?? "";
+        bv = b.name ?? "";
+        break;
+      case "model":
+        av = a.model;
+        bv = b.model;
+        break;
+      case "turn_count":
+        av = a.turn_count;
+        bv = b.turn_count;
+        break;
+      case "gc_state":
+        av = a.current_ctx_pct ?? 0;
+        bv = b.current_ctx_pct ?? 0;
+        break;
       case "current_ctx_pct":
-      default:              av = a.current_ctx_pct ?? 0; bv = b.current_ctx_pct ?? 0;
+      default:
+        av = a.current_ctx_pct ?? 0;
+        bv = b.current_ctx_pct ?? 0;
     }
     const cmp = av < bv ? -1 : av > bv ? 1 : 0;
     return sortDir === "asc" ? cmp : -cmp;
@@ -47,7 +61,12 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
     const active = sortKey === key;
     return (
       <th
-        style={{ ...styles.th, textAlign: align, cursor: "pointer", color: active ? "#aeaeb2" : "#48484a" }}
+        style={{
+          ...styles.th,
+          textAlign: align,
+          cursor: "pointer",
+          color: active ? "#aeaeb2" : "#48484a",
+        }}
         onClick={() => handleSort(key)}
       >
         {label} {active ? (sortDir === "asc" ? "↑" : "↓") : ""}
@@ -89,24 +108,51 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                 <td style={styles.td}>
                   <div style={styles.sessionCell}>
                     <span style={{ ...styles.dot, background: color }} />
-                    <span style={styles.sessionName}>{s.name ?? "unnamed"}</span>
+                    <span style={styles.sessionName}>
+                      {s.name ?? "unnamed"}
+                    </span>
                     <span style={styles.sessionId}>{s.id.slice(0, 6)}</span>
                   </div>
                 </td>
 
                 {/* Model */}
                 <td style={styles.td}>
-                  <span style={styles.mono}>{s.model.replace("claude-", "")}</span>
+                  <span style={styles.mono}>
+                    {s.model.replace("claude-", "")}
+                  </span>
                 </td>
 
                 {/* Progress bar */}
                 <td style={styles.td}>
                   <div style={styles.barTrack}>
-                    <div style={{ ...styles.barFill, width: `${Math.min(pct * 100, 100)}%`, background: color }} />
-                    <div style={{ ...styles.barZone, left: "60%", background: `${GC_COLOR.soft_gc}22` }} />
-                    <div style={{ ...styles.barZone, left: "80%", width: "20%", background: `${GC_COLOR.hard_gc}22` }} />
+                    <div
+                      style={{
+                        ...styles.barFill,
+                        width: `${Math.min(pct * 100, 100)}%`,
+                        background: color,
+                      }}
+                    />
+                    <div
+                      style={{
+                        ...styles.barZone,
+                        left: "60%",
+                        background: `${GC_COLOR.soft_gc}22`,
+                      }}
+                    />
+                    <div
+                      style={{
+                        ...styles.barZone,
+                        left: "80%",
+                        width: "20%",
+                        background: `${GC_COLOR.hard_gc}22`,
+                      }}
+                    />
                   </div>
-                  <span style={styles.barTokens}>{approxTokens > 0 ? `${(approxTokens / 1000).toFixed(1)}k` : "—"}</span>
+                  <span style={styles.barTokens}>
+                    {approxTokens > 0
+                      ? `${(approxTokens / 1000).toFixed(1)}k`
+                      : "—"}
+                  </span>
                 </td>
 
                 {/* CTX % */}
@@ -123,7 +169,14 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
 
                 {/* GC State */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span style={{ ...styles.badge, background: `${color}18`, color, borderColor: `${color}40` }}>
+                  <span
+                    style={{
+                      ...styles.badge,
+                      background: `${color}18`,
+                      color,
+                      borderColor: `${color}40`,
+                    }}
+                  >
                     {GC_LABEL[state]}
                   </span>
                 </td>
