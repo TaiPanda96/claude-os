@@ -50,10 +50,18 @@ export function gcState(ctxPct: number): GCState {
   return "clean";
 }
 
+// Dot/glyph colors — matches design system gc-states.css
 export const GC_COLOR: Record<GCState, string> = {
-  clean: "#34c759",
-  soft_gc: "#ff9500",
-  hard_gc: "#ff3b30",
+  clean:   "#22C55E",
+  soft_gc: "#F59E0B",
+  hard_gc: "#EF4444",
+};
+
+// Text colors for badges, labels, numeric values
+export const GC_TEXT: Record<GCState, string> = {
+  clean:   "#4ADE80",
+  soft_gc: "#FBBF24",
+  hard_gc: "#F87171",
 };
 
 export const SERVER = "http://localhost:7842";

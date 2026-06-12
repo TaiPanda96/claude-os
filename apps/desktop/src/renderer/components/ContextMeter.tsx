@@ -1,5 +1,6 @@
 import React from "react";
-import { GC_COLOR, GCState, gcState } from "../types.js";
+import { GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
+import { tokens } from "../theme.js";
 
 interface Props {
   ctxPct: number;
@@ -9,11 +10,12 @@ interface Props {
 
 export function ContextMeter({ ctxPct, turnCount, model }: Props) {
   const state: GCState = gcState(ctxPct);
-  const color = GC_COLOR[state];
+  const dotColor = GC_COLOR[state];
+  const textColor = GC_TEXT[state];
   const pctDisplay = (ctxPct * 100).toFixed(1);
 
   const stateLabel: Record<GCState, string> = {
-    clean: "Clean",
+    clean:   "Clean",
     soft_gc: "Soft GC",
     hard_gc: "Hard GC",
   };
@@ -22,7 +24,7 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
     <div style={styles.container}>
       <div style={styles.row}>
         <div>
-          <div style={{ ...styles.bigPct, color }}>{pctDisplay}%</div>
+          <div style={{ ...styles.bigPct, color: textColor }}>{pctDisplay}%</div>
           <div style={styles.label}>context used</div>
         </div>
         <div style={styles.divider} />
@@ -32,7 +34,7 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
         </div>
         <div style={styles.divider} />
         <div>
-          <div style={{ ...styles.stat, color }}>{stateLabel[state]}</div>
+          <div style={{ ...styles.stat, color: textColor }}>{stateLabel[state]}</div>
           <div style={styles.label}>gc state</div>
         </div>
         <div style={styles.divider} />
@@ -42,13 +44,13 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
         </div>
       </div>
       <div style={styles.track}>
-        <div style={{ ...styles.softZone }} />
-        <div style={{ ...styles.hardZone }} />
+        <div style={styles.softZone} />
+        <div style={styles.hardZone} />
         <div
           style={{
             ...styles.fill,
             width: `${Math.min(ctxPct * 100, 100)}%`,
-            background: color,
+            background: dotColor,
           }}
         />
         <div style={styles.softLine} title="Soft GC (60%)" />
@@ -61,7 +63,7 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
             position: "absolute",
             left: "60%",
             transform: "translateX(-50%)",
-            color: GC_COLOR.soft_gc,
+            color: GC_TEXT.soft_gc,
           }}
         >
           60%
@@ -71,7 +73,7 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
             position: "absolute",
             left: "80%",
             transform: "translateX(-50%)",
-            color: GC_COLOR.hard_gc,
+            color: GC_TEXT.hard_gc,
           }}
         >
           80%
@@ -84,48 +86,49 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    padding: "16px 24px",
-    borderBottom: "1px solid #2c2c2e",
-    background: "#111113",
+    padding: `${tokens.sp4}px ${tokens.sp6}px`,
+    borderBottom: `0.5px solid ${tokens.border}`,
+    background: tokens.surface0,
   },
   row: {
     display: "flex",
     alignItems: "center",
-    gap: 24,
+    gap: tokens.sp6,
     marginBottom: 14,
   },
   bigPct: {
     fontSize: 28,
     fontWeight: 700,
     fontVariantNumeric: "tabular-nums",
-    fontFamily: "monospace",
+    fontFamily: tokens.fontMono,
     lineHeight: 1,
     marginBottom: 3,
   },
   stat: {
     fontSize: 16,
     fontWeight: 600,
-    color: "#f2f2f7",
-    fontFamily: "monospace",
+    color: tokens.highlight,
+    fontFamily: tokens.fontMono,
     lineHeight: 1,
     marginBottom: 3,
   },
   label: {
-    fontSize: 10,
-    color: "#48484a",
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
+    fontFamily: tokens.fontMono,
   },
   divider: {
-    width: 1,
+    width: 0.5,
     height: 36,
-    background: "#2c2c2e",
+    background: tokens.border,
   },
   track: {
     position: "relative",
     height: 6,
-    background: "#2c2c2e",
-    borderRadius: 3,
+    background: tokens.surface2,
+    borderRadius: tokens.radiusPill,
     overflow: "visible",
     marginBottom: 4,
   },
@@ -135,7 +138,6 @@ const styles: Record<string, React.CSSProperties> = {
     width: "20%",
     height: "100%",
     background: `${GC_COLOR.soft_gc}18`,
-    borderRadius: 0,
   },
   hardZone: {
     position: "absolute",
@@ -143,14 +145,14 @@ const styles: Record<string, React.CSSProperties> = {
     width: "20%",
     height: "100%",
     background: `${GC_COLOR.hard_gc}18`,
-    borderRadius: "0 3px 3px 0",
+    borderRadius: `0 ${tokens.radiusPill}px ${tokens.radiusPill}px 0`,
   },
   fill: {
     position: "absolute",
     top: 0,
     left: 0,
     height: "100%",
-    borderRadius: 3,
+    borderRadius: tokens.radiusPill,
     transition: "width 0.4s ease, background 0.3s ease",
     zIndex: 1,
   },
@@ -158,7 +160,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: "absolute",
     left: "60%",
     top: -3,
-    width: 1,
+    width: 0.5,
     height: 12,
     background: GC_COLOR.soft_gc,
     opacity: 0.5,
@@ -167,7 +169,7 @@ const styles: Record<string, React.CSSProperties> = {
     position: "absolute",
     left: "80%",
     top: -3,
-    width: 1,
+    width: 0.5,
     height: 12,
     background: GC_COLOR.hard_gc,
     opacity: 0.5,
@@ -175,7 +177,8 @@ const styles: Record<string, React.CSSProperties> = {
   trackLabels: {
     position: "relative",
     display: "flex",
-    fontSize: 10,
-    color: "#48484a",
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
+    fontFamily: tokens.fontMono,
   },
 };

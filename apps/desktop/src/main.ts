@@ -124,6 +124,7 @@ async function fetchMostActiveSession(): Promise<SessionRow | null> {
 let tray: Tray | null = null;
 let win: BrowserWindow | null = null;
 let lastGCState: GCState = "clean";
+let lastTrend: "rising" | "flat" | "declining" = "flat";
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 const IS_DEV =
@@ -180,6 +181,21 @@ function buildContextMenu(
   ]);
 }
 
+async function fetchSessionHealth(sessionId: string) {
+  try {
+    const res = await fetch(`${SERVER_URL}/sessions/${sessionId}/health`);
+    if (!res.ok) return null;
+    return res.json() as Promise<{
+      recentTrend: "rising" | "flat" | "declining";
+      turnsToInflection: number | null;
+      currentQuality: number;
+      inflectionCtxPct: number | null;
+    }>;
+  } catch {
+    return null;
+  }
+}
+
 async function poll() {
   try {
     const session = await fetchMostActiveSession();
@@ -189,23 +205,41 @@ async function poll() {
     if (!tray) return;
 
     tray.setImage(makeTrayIcon(gcState));
-    tray.setToolTip(
-      session
-        ? `Claude OS · ${(ctxPct * 100).toFixed(1)}% · ${GC_LABELS[gcState]}`
-        : "Claude OS · no active session",
-    );
     tray.setContextMenu(buildContextMenu(session, gcState, ctxPct));
 
-    // Notify on hard_gc transition
-    if (gcState === "hard_gc" && lastGCState !== "hard_gc") {
+    // Fetch slope-based health for the active session
+    const health = session ? await fetchSessionHealth(session.id) : null;
+    const trend = health?.recentTrend ?? "flat";
+
+    tray.setToolTip(
+      session
+        ? `Claude OS · ${Math.min(ctxPct * 100, 100).toFixed(1)}% · ${GC_LABELS[gcState]}${trend === "declining" ? " · ↓ degrading" : ""}`
+        : "Claude OS · no active session",
+    );
+
+    // Phase 3 — proactive: fire when slope turns negative, before GC thresholds fire
+    if (trend === "declining" && lastTrend !== "declining") {
+      const turnsMsg = health?.turnsToInflection != null
+        ? ` Quality may drop below threshold in ~${health.turnsToInflection} turns.`
+        : "";
       new Notification({
-        title: "Claude OS — Context Warning",
-        body: `Session "${session?.name ?? "unnamed"}" is at ${(ctxPct * 100).toFixed(0)}% context. Consider compacting.`,
+        title: "Claude OS — Quality Declining",
+        body: `Session "${session?.name ?? "unnamed"}" quality is trending down at ${Math.min(ctxPct * 100, 100).toFixed(0)}% context.${turnsMsg}`,
+        silent: false,
+      }).show();
+    }
+
+    // Reactive fallback: hard GC transition (threshold-based, kept as safety net)
+    if (gcState === "hard_gc" && lastGCState !== "hard_gc" && lastTrend !== "declining") {
+      new Notification({
+        title: "Claude OS — Hard GC",
+        body: `Session "${session?.name ?? "unnamed"}" is at ${Math.min(ctxPct * 100, 100).toFixed(0)}% context. Consider compacting.`,
         silent: false,
       }).show();
     }
 
     lastGCState = gcState;
+    lastTrend = trend;
   } catch (err) {
     console.error("[poll]", err);
   }

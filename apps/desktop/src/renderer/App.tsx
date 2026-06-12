@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { SessionTable } from "./components/SessionTable.js";
 import { DetailPanel } from "./components/DetailPanel.js";
 import { SessionRow, SessionDetail, GCEvent, SERVER } from "./types.js";
+import { tokens } from "./theme.js";
 
 const POLL_MS = 5_000;
 
@@ -115,33 +116,35 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     flexDirection: "column",
     height: "100vh",
-    background: "#0d0d0f",
+    background: tokens.void,
     userSelect: "none",
     overflow: "hidden",
+    fontFamily: tokens.fontMono,
   },
   titleBar: {
     height: 36,
     display: "flex",
     alignItems: "center",
     paddingLeft: 80,
-    paddingRight: 20,
-    borderBottom: "1px solid #2c2c2e",
-    background: "#111113",
+    paddingRight: tokens.sp4,
+    borderBottom: `0.5px solid ${tokens.border}`,
+    background: tokens.surface0,
     // @ts-ignore
     WebkitAppRegion: "drag",
     flexShrink: 0,
   },
   titleText: {
-    fontSize: 13,
+    fontSize: tokens.fsBody,
     fontWeight: 600,
-    color: "#636366",
+    color: tokens.muted,
     letterSpacing: "0.04em",
+    fontFamily: tokens.fontMono,
   },
   titleMeta: {
     marginLeft: "auto",
-    fontSize: 11,
-    color: "#3a3a3c",
-    fontFamily: "monospace",
+    fontSize: tokens.fsLabel,
+    color: tokens.border,
+    fontFamily: tokens.fontMono,
   },
   error: {
     height: "100vh",
@@ -149,18 +152,19 @@ const styles: Record<string, React.CSSProperties> = {
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 12,
+    gap: tokens.sp3,
   },
-  errorIcon: { fontSize: 32, color: "#ff3b30" },
-  errorText: { color: "#636366", fontSize: 13, fontFamily: "monospace" },
+  errorIcon: { fontSize: 32, color: "#EF4444" },
+  errorText: { color: tokens.muted, fontSize: tokens.fsBody, fontFamily: tokens.fontMono },
   retryBtn: {
-    marginTop: 4,
+    marginTop: tokens.sp1,
     padding: "6px 16px",
-    background: "#1c1c1e",
-    border: "1px solid #3a3a3c",
-    borderRadius: 6,
-    color: "#f2f2f7",
-    fontSize: 12,
+    background: tokens.surface1,
+    border: `1px solid ${tokens.border}`,
+    borderRadius: tokens.radiusMd,
+    color: tokens.highlight,
+    fontSize: tokens.fsData,
     cursor: "pointer",
+    fontFamily: tokens.fontMono,
   },
 };

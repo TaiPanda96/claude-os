@@ -29,3 +29,5 @@ export {
   findJsonlForSession,
   DEFAULT_PROJECTS_DIR,
 } from "./ingest/project-discovery.js";
+export { computeSessionHealthStats } from "./health.js";
+export type { SessionHealthStats } from "./health.js";

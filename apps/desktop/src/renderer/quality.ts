@@ -115,10 +115,16 @@ export interface SessionStats {
   qualityDelta: number;
   firstGCCtxPct: number | null;
   firstGCType: string | null;
-  // new
   avgMarginalDensity: number; // avg new-ctx-tokens per output token
   currentWorkEfficiency: number; // tokens-per-artifact at end of session
+  // Phase 3 — proactive degradation signal
+  currentQuality: number;       // quality at the most recent turn
+  turnsToInflection: number | null; // projected turns until quality crosses QUALITY_FLOOR
 }
+
+// Quality floor used for turnsToInflection projection.
+// Chosen at 0.3: below this the session is producing low-value output.
+const QUALITY_FLOOR = 0.3;
 
 export function deriveStats(
   points: ChartPoint[],
@@ -135,6 +141,8 @@ export function deriveStats(
     firstGCType,
     avgMarginalDensity: 0,
     currentWorkEfficiency: 0,
+    currentQuality: 0,
+    turnsToInflection: null,
   };
   if (points.length === 0) return empty;
 
@@ -186,6 +194,18 @@ export function deriveStats(
   // Work efficiency at the end of the session (raw tokens-per-artifact)
   const currentWorkEfficiency = points[points.length - 1]!.workEfficiencyRaw;
 
+  const currentQuality = points[points.length - 1]!.quality;
+
+  // turnsToInflection — linear extrapolation from the last 10 quality points.
+  // Projects how many more turns until quality crosses QUALITY_FLOOR.
+  // Only meaningful when the recent slope is negative; null otherwise.
+  let turnsToInflection: number | null = null;
+  if (slope < -0.01 && currentQuality > QUALITY_FLOOR) {
+    // slope is quality-change-per-turn; solve for turns: floor = current + slope * t
+    const t = (QUALITY_FLOOR - currentQuality) / slope;
+    turnsToInflection = t > 0 ? Math.round(t) : null;
+  }
+
   return {
     peakQuality: peak.quality,
     peakCtxPct: peak.ctxPct,
@@ -196,5 +216,7 @@ export function deriveStats(
     firstGCType,
     avgMarginalDensity: Math.round(avgMarginalDensity),
     currentWorkEfficiency,
+    currentQuality,
+    turnsToInflection,
   };
 }
