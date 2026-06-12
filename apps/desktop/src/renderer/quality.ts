@@ -32,6 +32,11 @@ function normalize(values: number[]): number[] {
 // to 1.0, making it look identical to a strong session that peaks at 0.34.
 const OUTPUT_DENSITY_ANCHOR = 0.4;
 
+// self_correction_count is a raw occurrence count (see countSelfCorrections), not [0,1].
+// A soft ceiling of 5 preserves magnitude — a turn with 3 corrections scores worse than
+// one with 1 — while keeping the contribution bounded. Clamping at 1 would make it binary.
+const SELF_CORRECTION_ANCHOR = 5;
+
 export function computeQuality(turns: Turn[]): ChartPoint[] {
   if (turns.length === 0) return [];
 
@@ -80,7 +85,7 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
     gcState: t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
     quality: Math.round(
       (Math.min(1, (t.outputDensity ?? 0) / OUTPUT_DENSITY_ANCHOR) * 0.5
-        + (1 - Math.min(1, t.selfCorrectionCount ?? 0)) * 0.3
+        + (1 - Math.min(1, (t.selfCorrectionCount ?? 0) / SELF_CORRECTION_ANCHOR)) * 0.3
         + (1 - (t.repetitionScore ?? 0)) * 0.2) * 100,
     ) / 100,
     outputDensity: t.outputDensity ?? 0,
