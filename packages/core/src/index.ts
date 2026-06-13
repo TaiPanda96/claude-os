@@ -31,3 +31,15 @@ export {
 } from "./ingest/project-discovery.js";
 export { computeSessionHealthStats } from "./health.js";
 export type { SessionHealthStats } from "./health.js";
+export {
+  resolveProjectId, getProject, getProjectByCwd,
+  getPolicy, upsertPolicy,
+  insertCompactionEvent, updateCompactionEvent,
+  getCompactionEvents, getLastCompactionEvent,
+} from "./db.js";
+export { runCompaction } from "./compaction.js";
+export type {
+  Project, CompactionPolicy, CompactionEvent, CompactionFileResult,
+  MemoryFile, UpdateMode, DecayScope, TriggerConfig,
+} from "./types.js";
+export { TriggerTypeEnum } from "./types.js";
