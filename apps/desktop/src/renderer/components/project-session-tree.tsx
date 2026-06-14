@@ -216,7 +216,7 @@ export function ProjectSessionTree({
             </div>
 
             {/* Policy banner — project-level, always visible (distinct from sessions) */}
-            {group.id && (
+            {group.id && project && (
               <PolicyBanner
                 project={project}
                 onEdit={() => onSelectProject(group.id!)}
