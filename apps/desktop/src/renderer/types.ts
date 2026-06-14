@@ -20,6 +20,9 @@ export interface Project {
   session_count: number;
   last_active_at: number | null;
   has_policy: 0 | 1;
+  // Present when a compaction policy exists for the project (null otherwise).
+  policy_name: string | null;
+  policy_active: 0 | 1 | null;
 }
 
 // ── Policy types (mirrors packages/core/src/types.ts) ──────────────────────

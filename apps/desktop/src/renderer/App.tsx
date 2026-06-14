@@ -12,16 +12,23 @@ const TTL_OPTIONS = [
   { label: "All", days: 0 },
 ] as const;
 
+type ViewMode = "project" | "session";
+const VIEW_OPTIONS = [
+  { label: "By Project", value: "project" },
+  { label: "By Session", value: "session" },
+] as const;
+
 export function App() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [ttlDays, setTtlDays] = useState<number>(7);
+  const [view, setView] = useState<ViewMode>("project");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [gcEvents, setGcEvents] = useState<GCEvent[]>([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  const [selectedProject, setSelectedProject] = useState<Project | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -51,32 +58,30 @@ export function App() {
     }
   }, []);
 
-  const fetchProject = useCallback(async (id: string) => {
+  const fetchProjects = useCallback(async () => {
     try {
       const res = await fetch(`${SERVER}/projects`);
       if (!res.ok) return;
-      const projects: Project[] = await res.json();
-      const found = projects.find((p) => p.id === id) ?? null;
-      setSelectedProject(found);
+      const data: Project[] = await res.json();
+      setProjects(data);
     } catch {
-      // non-critical
+      // non-critical — policy banners just won't render
     }
   }, []);
 
   useEffect(() => {
     fetchSessions();
-    const t = setInterval(fetchSessions, POLL_MS);
+    fetchProjects();
+    const t = setInterval(() => {
+      fetchSessions();
+      fetchProjects();
+    }, POLL_MS);
     return () => clearInterval(t);
-  }, [fetchSessions]);
+  }, [fetchSessions, fetchProjects]);
 
   useEffect(() => {
     if (selectedId) fetchDetail(selectedId);
   }, [selectedId, fetchDetail]);
-
-  useEffect(() => {
-    if (selectedProjectId) fetchProject(selectedProjectId);
-    else setSelectedProject(null);
-  }, [selectedProjectId, fetchProject]);
 
   function handleSelect(id: string) {
     setSelectedProjectId(null);
@@ -97,6 +102,7 @@ export function App() {
   }
 
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
+  const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
   const sessionCount = sessions.length;
 
   if (error) {
@@ -134,20 +140,37 @@ export function App() {
           {sessionCount} session{sessionCount !== 1 ? "s" : ""}
         </span>
 
-        {/* TTL filter */}
-        <div style={styles.ttlControl}>
-          {TTL_OPTIONS.map((opt) => (
-            <button
-              key={opt.label}
-              style={{
-                ...styles.ttlBtn,
-                ...(ttlDays === opt.days ? styles.ttlBtnActive : {}),
-              }}
-              onClick={() => setTtlDays(opt.days)}
-            >
-              {opt.label}
-            </button>
-          ))}
+        {/* Right-aligned controls: View mode + TTL filter */}
+        <div style={styles.controls}>
+          <div style={styles.segGroup}>
+            {VIEW_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                style={{
+                  ...styles.segBtn,
+                  ...(view === opt.value ? styles.segBtnActive : {}),
+                }}
+                onClick={() => setView(opt.value)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
+          <div style={styles.segGroup}>
+            {TTL_OPTIONS.map((opt) => (
+              <button
+                key={opt.label}
+                style={{
+                  ...styles.segBtn,
+                  ...(ttlDays === opt.days ? styles.segBtnActive : {}),
+                }}
+                onClick={() => setTtlDays(opt.days)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -155,6 +178,8 @@ export function App() {
       <div style={styles.content}>
         <ProjectSessionTree
           sessions={sessions}
+          projects={projects}
+          view={view}
           ttlDays={ttlDays}
           selected={selectedId}
           onSelect={handleSelect}
@@ -222,28 +247,36 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: tokens.fontMono,
     letterSpacing: "0.02em",
   },
-  ttlControl: {
+  controls: {
     marginLeft: "auto",
     display: "flex",
-    gap: 2,
+    alignItems: "center",
+    gap: 10,
     // @ts-ignore
     WebkitAppRegion: "no-drag",
   },
-  ttlBtn: {
-    background: "transparent",
+  // Segmented control — used for both the View and TTL toggles
+  segGroup: {
+    display: "flex",
+    gap: 0,
+    background: tokens.void,
     border: `0.5px solid ${tokens.surface2}`,
-    borderRadius: tokens.radiusXs,
+    borderRadius: tokens.radiusSm,
+    overflow: "hidden",
+  },
+  segBtn: {
+    background: "transparent",
+    border: "none",
     color: tokens.muted,
     fontSize: tokens.fsMicro,
     fontFamily: tokens.fontMono,
     cursor: "pointer",
-    padding: "2px 7px",
+    padding: "3px 9px",
     letterSpacing: "0.04em",
   },
-  ttlBtnActive: {
+  segBtnActive: {
     background: tokens.surface2,
     color: tokens.highlight,
-    border: `0.5px solid ${tokens.border}`,
   },
   content: {
     flex: 1,
