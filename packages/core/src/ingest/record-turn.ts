@@ -1,0 +1,123 @@
+import type { Database, Turn, GCState } from "../types.js";
+import { computeGCState, MODEL_CONTEXT_WINDOWS } from "../types.js";
+import { bigramOverlap } from "../utils/bigram-overlap.js";
+import { countSelfCorrections } from "../utils/count-self-corrections.js";
+import { v4 as uuidv4 } from "uuid";
+
+export interface RawTurnInput {
+  /** Caller-supplied id. Ingest uses the JSONL record uuid; wrapper uses a fresh uuid.
+   *  Dedup is enforced by the UNIQUE index on (session_id, turn_index), not by this id. */
+  id?: string;
+  sessionId: string;
+  turnIndex: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  outputText: string;
+  prevOutputText: string;
+  latencyMs: number;
+  stopReason: string | null;
+  createdAt: number;
+  model: string;
+  cwd: string;
+}
+
+export interface RecordTurnResult {
+  turn: Turn;
+  inserted: boolean;
+  gcTransitioned: boolean;
+  gcState: GCState;
+}
+
+/** Derives all Turn fields from raw input using the canonical metric definitions. */
+export function computeTurnMetrics(input: RawTurnInput): Turn {
+  const ctxWindow = MODEL_CONTEXT_WINDOWS[input.model] ?? 200_000;
+  const effectiveInput = input.inputTokens + input.cacheReadTokens + input.cacheCreationTokens;
+  const cumulativeTokens = effectiveInput + input.outputTokens;
+  // Clamp: values >1 mean the model window is unknown (defaults to 200k) but real window is larger
+  const ctxPct = Math.min(effectiveInput / ctxWindow, 1.0);
+  const outputDensity = effectiveInput > 0 ? input.outputTokens / effectiveInput : 0;
+
+  return {
+    id: input.id ?? uuidv4(),
+    sessionId: input.sessionId,
+    turnIndex: input.turnIndex,
+    inputTokens: input.inputTokens,
+    outputTokens: input.outputTokens,
+    cumulativeTokens,
+    ctxPct,
+    latencyMs: input.latencyMs,
+    stopReason: input.stopReason,
+    createdAt: input.createdAt,
+    selfCorrectionCount: countSelfCorrections(input.outputText),
+    repetitionScore: bigramOverlap(input.prevOutputText, input.outputText),
+    outputDensity,
+    cacheReadTokens: input.cacheReadTokens,
+    cacheCreationTokens: input.cacheCreationTokens,
+    effectiveInputTokens: effectiveInput,
+    cwd: input.cwd,
+  };
+}
+
+/**
+ * Persists a turn and, on first GC state transition, its GC event.
+ * INSERT OR IGNORE on (session_id, turn_index) makes both the live and backfill
+ * paths safe to run over the same session without producing duplicate rows.
+ */
+export function recordTurn(db: Database, turn: Turn, prevGCState: GCState): RecordTurnResult {
+  const result = db
+    .prepare(
+      `INSERT OR IGNORE INTO turns (
+        id, session_id, turn_index, input_tokens, output_tokens, cumulative_tokens,
+        ctx_pct, latency_ms, stop_reason, created_at,
+        self_correction_count, repetition_score, output_density,
+        cache_read_tokens, cache_creation_tokens, effective_input_tokens, cwd
+      ) VALUES (
+        $id, $sessionId, $turnIndex, $inputTokens, $outputTokens, $cumulativeTokens,
+        $ctxPct, $latencyMs, $stopReason, $createdAt,
+        $selfCorrectionCount, $repetitionScore, $outputDensity,
+        $cacheRead, $cacheCreation, $effectiveInput, $cwd
+      )`,
+    )
+    .run({
+      $id: turn.id,
+      $sessionId: turn.sessionId,
+      $turnIndex: turn.turnIndex,
+      $inputTokens: turn.inputTokens,
+      $outputTokens: turn.outputTokens,
+      $cumulativeTokens: turn.cumulativeTokens,
+      $ctxPct: turn.ctxPct,
+      $latencyMs: turn.latencyMs,
+      $stopReason: turn.stopReason,
+      $createdAt: turn.createdAt,
+      $selfCorrectionCount: turn.selfCorrectionCount,
+      $repetitionScore: turn.repetitionScore,
+      $outputDensity: turn.outputDensity,
+      $cacheRead: turn.cacheReadTokens ?? 0,
+      $cacheCreation: turn.cacheCreationTokens ?? 0,
+      $effectiveInput: turn.effectiveInputTokens ?? 0,
+      $cwd: turn.cwd ?? null,
+    });
+
+  const inserted = (result as { changes: number }).changes > 0;
+
+  const gcState = computeGCState(turn.ctxPct);
+  let gcTransitioned = false;
+
+  if (inserted && gcState !== prevGCState && gcState !== "clean") {
+    db.prepare(
+      `INSERT OR IGNORE INTO gc_events (id, session_id, gc_type, ctx_pct_at_trigger, created_at)
+       VALUES ($id, $sessionId, $gcType, $ctxPct, $createdAt)`,
+    ).run({
+      $id: `${turn.sessionId}:${turn.turnIndex}:gc`,
+      $sessionId: turn.sessionId,
+      $gcType: gcState,
+      $ctxPct: turn.ctxPct,
+      $createdAt: turn.createdAt,
+    });
+    gcTransitioned = true;
+  }
+
+  return { turn, inserted, gcTransitioned, gcState };
+}

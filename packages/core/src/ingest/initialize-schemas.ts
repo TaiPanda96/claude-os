@@ -32,6 +32,10 @@ export function initializeSchemas(db: Database) {
   ctx_pct_at_trigger REAL NOT NULL, created_at INTEGER NOT NULL
 )`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id)`);
+  // Dedup key: both live and backfill paths write OR IGNORE against this
+  db.run(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_turns_unique_session_index ON turns(session_id, turn_index)`,
+  );
   db.run(
     `CREATE INDEX IF NOT EXISTS idx_gc_events_session ON gc_events(session_id)`,
   );

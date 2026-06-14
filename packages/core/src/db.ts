@@ -105,6 +105,29 @@ export function insertSession(db: Database, s: Session): void {
   });
 }
 
+/** Idempotent session write — safe from both the live wrapper and the backfill ingest. */
+export function upsertSession(db: Database, s: Session): void {
+  db.prepare(
+    `INSERT INTO sessions (id, name, model, ctx_window, created_at, last_active_at, status, outcome_status, forked_from, project_id)
+     VALUES ($id, $name, $model, $ctxWindow, $createdAt, $lastActiveAt, $status, $outcomeStatus, $forkedFrom, $projectId)
+     ON CONFLICT(id) DO UPDATE SET
+       last_active_at = excluded.last_active_at,
+       model          = excluded.model,
+       project_id     = COALESCE(excluded.project_id, project_id)`,
+  ).run({
+    $id: s.id,
+    $name: s.name,
+    $model: s.model,
+    $ctxWindow: s.ctxWindow,
+    $createdAt: s.createdAt,
+    $lastActiveAt: s.lastActiveAt,
+    $status: s.status,
+    $outcomeStatus: s.outcomeStatus,
+    $forkedFrom: s.forkedFrom,
+    $projectId: s.projectId ?? null,
+  });
+}
+
 export function insertTurn(db: Database, t: Turn): void {
   db.prepare(
     `

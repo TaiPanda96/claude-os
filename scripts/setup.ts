@@ -14,11 +14,7 @@ import { spawnSync } from "node:child_process";
 const REPO_ROOT = resolve(dirname(import.meta.path), "..");
 const HOOK_SCRIPT = join(REPO_ROOT, "scripts", "hook-stop.ts");
 const SETTINGS_PATH = join(process.env.HOME ?? "~", ".claude", "settings.json");
-const CLAUDE_PROJECTS_PATH = join(
-  process.env.HOME ?? "~",
-  ".claude",
-  "projects",
-);
+const CLAUDE_PROJECTS_PATH = join(process.env.HOME ?? "~", ".claude", "projects");
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -63,8 +59,7 @@ header("Checking prerequisites");
 let prereqsFailed = false;
 
 // Bun ≥ 1.1
-const bunVersion =
-  spawnSync("bun", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
+const bunVersion = spawnSync("bun", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
 if (bunVersion && semverAtLeast(bunVersion, "1.1")) {
   ok(`Bun ${bunVersion}`);
 } else if (bunVersion) {
@@ -76,8 +71,7 @@ if (bunVersion && semverAtLeast(bunVersion, "1.1")) {
 }
 
 // Node ≥ 20 (required by Electron)
-const nodeVersion =
-  spawnSync("node", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
+const nodeVersion = spawnSync("node", ["--version"], { encoding: "utf-8" }).stdout?.trim() ?? "";
 if (nodeVersion && semverAtLeast(nodeVersion.replace("v", ""), "20.0")) {
   ok(`Node.js ${nodeVersion}`);
 } else if (nodeVersion) {
@@ -112,9 +106,7 @@ if (existsSync(SETTINGS_PATH)) {
   try {
     settings = JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
   } catch {
-    fail(
-      `Could not parse ${SETTINGS_PATH} — fix JSON errors before running setup.`,
-    );
+    fail(`Could not parse ${SETTINGS_PATH} — fix JSON errors before running setup.`);
     process.exit(1);
   }
 }
@@ -140,11 +132,7 @@ if (alreadyInstalled) {
   });
   hooks.Stop = stopHooks;
   settings.hooks = hooks;
-  writeFileSync(
-    SETTINGS_PATH,
-    JSON.stringify(settings, null, 2) + "\n",
-    "utf-8",
-  );
+  writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2) + "\n", "utf-8");
   ok(`Stop hook added to ${SETTINGS_PATH}`);
   info(`Command: ${hookCommand}`);
 }
@@ -172,13 +160,9 @@ if (existsSync(CLAUDE_PROJECTS_PATH)) {
 
 if (transcriptCount > 0) {
   info(`Found ${transcriptCount} transcript(s) in ~/.claude/projects/`);
-  info(
-    "Run \x1b[1mbun run ingest\x1b[0m to populate the database with existing sessions.",
-  );
+  info("Run \x1b[1mbun run ingest\x1b[0m to populate the database with existing sessions.");
 } else {
-  info(
-    "No existing transcripts found — the database will populate as you use Claude Code.",
-  );
+  info("No existing transcripts found — the database will populate as you use Claude Code.");
 }
 
 // ── Done ──────────────────────────────────────────────────────────────────────
