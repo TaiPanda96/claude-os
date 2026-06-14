@@ -1,1062 +1,1401 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Claude OS — Context Monitor for Claude Sessions</title>
-<style>
-  :root {
-    --bg: #0d0d0f;
-    --surface: #1c1c1e;
-    --surface-2: #242426;
-    --surface-3: #2c2c2e;
-    --border: rgba(255,255,255,0.08);
-    --border-med: rgba(255,255,255,0.12);
-    --text: #f2f2f7;
-    --text-2: #aeaeb2;
-    --text-3: #636366;
-    --green: #34c759;
-    --amber: #ff9500;
-    --red: #ff3b30;
-    --green-dim: rgba(52,199,89,0.15);
-    --amber-dim: rgba(255,149,0,0.15);
-    --red-dim: rgba(255,59,48,0.15);
-    --mono: 'SF Mono', 'Monaco', 'Cascadia Code', 'Fira Code', monospace;
-    --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
-  }
-
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-
-  html { scroll-behavior: smooth; }
-
-  body {
-    background: var(--bg);
-    color: var(--text);
-    font-family: var(--sans);
-    font-size: 15px;
-    line-height: 1.6;
-    -webkit-font-smoothing: antialiased;
-  }
-
-  a { color: inherit; text-decoration: none; }
-
-  /* ── NAV ── */
-  nav {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    z-index: 100;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 32px;
-    height: 48px;
-    background: rgba(13,13,15,0.85);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    border-bottom: 0.5px solid var(--border);
-  }
-
-  .nav-logo {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-  }
-
-  .nav-dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    background: var(--green);
-    box-shadow: 0 0 8px var(--green);
-    animation: pulse-dot 2s ease-in-out infinite;
-  }
-
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-  }
-
-  .nav-links {
-    display: flex;
-    align-items: center;
-    gap: 24px;
-    font-size: 12px;
-    color: var(--text-2);
-  }
-
-  .nav-links a:hover { color: var(--text); }
-
-  /* ── HERO ── */
-  .hero {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 120px 32px 80px;
-    text-align: center;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .hero::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background:
-      radial-gradient(ellipse 600px 400px at 50% 30%, rgba(52,199,89,0.04) 0%, transparent 70%),
-      repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 39px,
-        rgba(255,255,255,0.018) 39px,
-        rgba(255,255,255,0.018) 40px
-      ),
-      repeating-linear-gradient(
-        90deg,
-        transparent,
-        transparent 39px,
-        rgba(255,255,255,0.018) 39px,
-        rgba(255,255,255,0.018) 40px
-      );
-    pointer-events: none;
-  }
-
-  .hero-eyebrow {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.12em;
-    text-transform: uppercase;
-    color: var(--green);
-    margin-bottom: 20px;
-    opacity: 0;
-    animation: fade-up 0.6s ease forwards 0.1s;
-  }
-
-  .hero-title {
-    font-size: clamp(48px, 8vw, 88px);
-    font-weight: 700;
-    letter-spacing: -0.04em;
-    line-height: 1;
-    margin-bottom: 20px;
-    opacity: 0;
-    animation: fade-up 0.6s ease forwards 0.2s;
-  }
-
-  .hero-title span {
-    color: var(--text-3);
-  }
-
-  .hero-sub {
-    font-size: 18px;
-    color: var(--text-2);
-    max-width: 560px;
-    line-height: 1.5;
-    margin-bottom: 48px;
-    font-weight: 400;
-    letter-spacing: -0.01em;
-    opacity: 0;
-    animation: fade-up 0.6s ease forwards 0.3s;
-  }
-
-  @keyframes fade-up {
-    from { opacity: 0; transform: translateY(16px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  /* ── CONTEXT METER (hero visual) ── */
-  .context-monitor {
-    width: 100%;
-    max-width: 680px;
-    background: var(--surface);
-    border: 0.5px solid var(--border-med);
-    border-radius: 12px;
-    overflow: hidden;
-    margin-bottom: 48px;
-    opacity: 0;
-    animation: fade-up 0.6s ease forwards 0.4s;
-  }
-
-  .monitor-titlebar {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 16px;
-    border-bottom: 0.5px solid var(--border);
-    background: var(--surface-2);
-  }
-
-  .traffic-light {
-    width: 12px; height: 12px; border-radius: 50%;
-    background: var(--surface-3);
-  }
-
-  .monitor-title {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-3);
-    flex: 1;
-    text-align: center;
-    letter-spacing: 0.02em;
-  }
-
-  .monitor-body {
-    padding: 20px 24px;
-  }
-
-  .session-row {
-    display: grid;
-    grid-template-columns: 180px 1fr 80px 60px 80px;
-    gap: 12px;
-    align-items: center;
-    padding: 10px 0;
-    border-bottom: 0.5px solid var(--border);
-    font-family: var(--mono);
-    font-size: 12px;
-  }
-
-  .session-row:last-child { border-bottom: none; }
-
-  .session-row.header {
-    color: var(--text-3);
-    font-size: 11px;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    padding-bottom: 8px;
-  }
-
-  .session-name {
-    color: var(--text);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .ctx-bar-wrap {
-    position: relative;
-    height: 6px;
-    background: var(--surface-3);
-    border-radius: 3px;
-    overflow: hidden;
-  }
-
-  .ctx-bar {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.3s ease, background 0.3s ease;
-  }
-
-  .ctx-pct {
-    color: var(--text-2);
-    text-align: right;
-  }
-
-  .gc-badge {
-    font-size: 10px;
-    padding: 2px 7px;
-    border-radius: 4px;
-    font-weight: 500;
-    letter-spacing: 0.02em;
-    text-align: center;
-  }
-
-  .gc-clean { background: var(--green-dim); color: var(--green); }
-  .gc-soft  { background: var(--amber-dim); color: var(--amber); }
-  .gc-hard  { background: var(--red-dim);   color: var(--red); }
-  .gc-aged  { background: rgba(99,99,102,0.2); color: var(--text-3); }
-
-  .tokens-col { color: var(--text-2); text-align: right; }
-
-  /* ── CTAs ── */
-  .ctas {
-    display: flex;
-    gap: 12px;
-    opacity: 0;
-    animation: fade-up 0.6s ease forwards 0.55s;
-  }
-
-  .btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 10px 20px;
-    border-radius: 8px;
-    font-size: 13px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-primary {
-    background: var(--text);
-    color: var(--bg);
-  }
-
-  .btn-primary:hover {
-    background: rgba(242,242,247,0.9);
-    transform: translateY(-1px);
-  }
-
-  .btn-secondary {
-    background: transparent;
-    color: var(--text-2);
-    border: 0.5px solid var(--border-med);
-  }
-
-  .btn-secondary:hover {
-    color: var(--text);
-    border-color: rgba(255,255,255,0.2);
-    background: var(--surface);
-  }
-
-  /* ── SECTIONS ── */
-  section {
-    max-width: 800px;
-    margin: 0 auto;
-    padding: 100px 32px;
-    border-top: 0.5px solid var(--border);
-  }
-
-  .section-label {
-    font-family: var(--mono);
-    font-size: 11px;
-    letter-spacing: 0.1em;
-    text-transform: uppercase;
-    color: var(--text-3);
-    margin-bottom: 20px;
-  }
-
-  .section-title {
-    font-size: clamp(28px, 4vw, 40px);
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    line-height: 1.15;
-    margin-bottom: 16px;
-  }
-
-  .section-body {
-    font-size: 16px;
-    color: var(--text-2);
-    max-width: 560px;
-    line-height: 1.65;
-  }
-
-  /* ── PROBLEM ── */
-  .problem-quote {
-    font-size: clamp(20px, 3vw, 26px);
-    font-weight: 500;
-    letter-spacing: -0.02em;
-    line-height: 1.35;
-    color: var(--text);
-    margin: 32px 0;
-    padding-left: 20px;
-    border-left: 2px solid var(--red);
-  }
-
-  .stat-row {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 1px;
-    background: var(--border);
-    border: 0.5px solid var(--border);
-    border-radius: 10px;
-    overflow: hidden;
-    margin-top: 40px;
-  }
-
-  .stat-cell {
-    background: var(--surface);
-    padding: 24px 20px;
-  }
-
-  .stat-num {
-    font-family: var(--mono);
-    font-size: 28px;
-    font-weight: 600;
-    letter-spacing: -0.03em;
-    color: var(--text);
-    margin-bottom: 4px;
-  }
-
-  .stat-label {
-    font-size: 12px;
-    color: var(--text-3);
-    line-height: 1.4;
-  }
-
-  /* ── SIGNAL / CHART ── */
-  .chart-wrap {
-    margin-top: 48px;
-    background: var(--surface);
-    border: 0.5px solid var(--border-med);
-    border-radius: 12px;
-    padding: 24px;
-  }
-
-  .chart-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 20px;
-  }
-
-  .chart-title {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-3);
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-  }
-
-  .chart-legend {
-    display: flex;
-    gap: 16px;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-3);
-  }
-
-  .legend-dot {
-    display: inline-block;
-    width: 6px; height: 6px;
-    border-radius: 50%;
-    margin-right: 4px;
-    vertical-align: middle;
-  }
-
-  #efficiency-canvas {
-    width: 100%;
-    display: block;
-  }
-
-  .chart-axes {
-    display: flex;
-    justify-content: space-between;
-    margin-top: 8px;
-    font-family: var(--mono);
-    font-size: 10px;
-    color: var(--text-3);
-  }
-
-  /* ── GC STATES ── */
-  .gc-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-    margin-top: 40px;
-  }
-
-  .gc-card {
-    background: var(--surface);
-    border: 0.5px solid var(--border);
-    border-radius: 10px;
-    padding: 20px;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .gc-card::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 0; right: 0;
-    height: 2px;
-  }
-
-  .gc-card.clean::before { background: var(--green); }
-  .gc-card.soft::before  { background: var(--amber); }
-  .gc-card.hard::before  { background: var(--red); }
-  .gc-card.aged::before  { background: var(--text-3); }
-
-  .gc-card-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-  }
-
-  .gc-card-indicator {
-    width: 10px; height: 10px;
-    border-radius: 50%;
-    flex-shrink: 0;
-  }
-
-  .clean .gc-card-indicator { background: var(--green); box-shadow: 0 0 6px var(--green); }
-  .soft  .gc-card-indicator { background: var(--amber); box-shadow: 0 0 6px var(--amber); }
-  .hard  .gc-card-indicator { background: var(--red);   box-shadow: 0 0 6px var(--red); }
-  .aged  .gc-card-indicator { background: var(--text-3); }
-
-  .gc-card-name {
-    font-weight: 600;
-    font-size: 14px;
-    letter-spacing: -0.01em;
-  }
-
-  .gc-card-threshold {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-3);
-    margin-left: auto;
-  }
-
-  .gc-card-desc {
-    font-size: 13px;
-    color: var(--text-2);
-    line-height: 1.5;
-    margin-bottom: 12px;
-  }
-
-  .gc-card-action {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-3);
-    padding: 6px 10px;
-    background: var(--surface-2);
-    border-radius: 5px;
-    display: inline-block;
-  }
-
-  /* ── ROADMAP ── */
-  .roadmap {
-    margin-top: 40px;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-  }
-
-  .phase {
-    display: grid;
-    grid-template-columns: 120px 1fr;
-    gap: 24px;
-    padding: 24px 0;
-    border-bottom: 0.5px solid var(--border);
-    position: relative;
-  }
-
-  .phase:last-child { border-bottom: none; }
-
-  .phase-num {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-3);
-    letter-spacing: 0.06em;
-    padding-top: 2px;
-  }
-
-  .phase-num.current {
-    color: var(--green);
-  }
-
-  .phase-current-badge {
-    display: inline-block;
-    font-size: 10px;
-    background: var(--green-dim);
-    color: var(--green);
-    padding: 2px 6px;
-    border-radius: 4px;
-    margin-top: 6px;
-    letter-spacing: 0.04em;
-  }
-
-  .phase-title {
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    margin-bottom: 6px;
-  }
-
-  .phase-items {
-    list-style: none;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-  }
-
-  .phase-items li {
-    font-size: 13px;
-    color: var(--text-2);
-    display: flex;
-    align-items: baseline;
-    gap: 8px;
-  }
-
-  .phase-items li::before {
-    content: '·';
-    color: var(--text-3);
-    flex-shrink: 0;
-  }
-
-  .phase.current .phase-items li::before {
-    content: '▸';
-    color: var(--green);
-    font-size: 10px;
-  }
-
-  .phase:not(.current) {
-    opacity: 0.5;
-  }
-
-  .phase.current {
-    opacity: 1;
-  }
-
-  /* ── FOOTER ── */
-  footer {
-    border-top: 0.5px solid var(--border);
-    padding: 40px 32px;
-    max-width: 800px;
-    margin: 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-
-  .footer-left {
-    font-family: var(--mono);
-    font-size: 11px;
-    color: var(--text-3);
-    line-height: 1.8;
-  }
-
-  .footer-left span {
-    color: var(--text-2);
-  }
-
-  .footer-right {
-    display: flex;
-    gap: 20px;
-    font-size: 12px;
-    color: var(--text-3);
-  }
-
-  .footer-right a:hover { color: var(--text-2); }
-
-  /* ── SEPARATOR ── */
-  .section-divider {
-    max-width: 800px;
-    margin: 0 auto;
-    height: 0;
-    border: none;
-    border-top: 0.5px solid var(--border);
-  }
-</style>
-</head>
-<body>
-
-<!-- NAV -->
-<nav>
-  <div class="nav-logo">
-    <div class="nav-dot"></div>
-    Claude OS
-  </div>
-  <div class="nav-links">
-    <a href="#signal">Signal</a>
-    <a href="#gc-states">GC States</a>
-    <a href="#roadmap">Roadmap</a>
-    <a href="https://github.com/taiganf" target="_blank" rel="noopener">GitHub ↗</a>
-  </div>
-</nav>
-
-<!-- HERO -->
-<div class="hero">
-  <div class="hero-eyebrow">v0.1 — Phase 0 in progress</div>
-  <h1 class="hero-title">Claude <span>OS</span></h1>
-  <p class="hero-sub">A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state — before quality degrades.</p>
-
-  <div class="context-monitor">
-    <div class="monitor-titlebar">
-      <div class="traffic-light" style="background:#ff5f57"></div>
-      <div class="traffic-light" style="background:#febc2e"></div>
-      <div class="traffic-light" style="background:#28c840"></div>
-      <div class="monitor-title">claude os — activity monitor</div>
-    </div>
-    <div class="monitor-body">
-      <div class="session-row header">
-        <span>session</span>
-        <span>context depth</span>
-        <span style="text-align:right">tokens</span>
-        <span style="text-align:right">ctx %</span>
-        <span style="text-align:center">gc state</span>
-      </div>
-      <div class="session-row" id="row-1">
-        <span class="session-name">refactor-auth-middleware</span>
-        <div class="ctx-bar-wrap"><div class="ctx-bar" id="bar-1" style="width:43%;background:var(--green)"></div></div>
-        <span class="tokens-col">84.2k</span>
-        <span class="ctx-pct" id="pct-1">43%</span>
-        <span class="gc-badge gc-clean" id="badge-1">Clean</span>
-      </div>
-      <div class="session-row" id="row-2">
-        <span class="session-name">product-spec-q3</span>
-        <div class="ctx-bar-wrap"><div class="ctx-bar" id="bar-2" style="width:67%;background:var(--amber)"></div></div>
-        <span class="tokens-col">130.5k</span>
-        <span class="ctx-pct" id="pct-2">67%</span>
-        <span class="gc-badge gc-soft" id="badge-2">Soft GC</span>
-      </div>
-      <div class="session-row" id="row-3">
-        <span class="session-name">debug-memory-leak-ios</span>
-        <div class="ctx-bar-wrap"><div class="ctx-bar" id="bar-3" style="width:88%;background:var(--red)"></div></div>
-        <span class="tokens-col">171.6k</span>
-        <span class="ctx-pct" id="pct-3">88%</span>
-        <span class="gc-badge gc-hard" id="badge-3">Hard GC ⚠</span>
-      </div>
-      <div class="session-row" id="row-4">
-        <span class="session-name" style="color:var(--text-3)">design-system-tokens</span>
-        <div class="ctx-bar-wrap"><div class="ctx-bar" id="bar-4" style="width:100%;background:var(--text-3)"></div></div>
-        <span class="tokens-col" style="color:var(--text-3)">194.4k</span>
-        <span class="ctx-pct" id="pct-4" style="color:var(--text-3)">—</span>
-        <span class="gc-badge gc-aged" id="badge-4">Aged</span>
-      </div>
-    </div>
-  </div>
-
-  <div class="ctas">
-    <a href="https://github.com/taiganf" target="_blank" rel="noopener" class="btn btn-primary">View on GitHub</a>
-    <a href="#signal" class="btn btn-secondary">How it works</a>
-  </div>
-</div>
-
-<!-- PROBLEM -->
-<section id="problem">
-  <div class="section-label">01 — The problem</div>
-  <h2 class="section-title">You can't see the cliff<br>until you're falling.</h2>
-  <div class="problem-quote">
-    "Past ~80% context utilisation, the model attends equally to stale retries and abandoned threads as it does to your original goals. Quality degrades. Silently."
-  </div>
-  <p class="section-body">
-    Every Claude session has a context efficiency curve. In the early portion, each input produces high-quality, well-grounded output. Past the garbage threshold — typically 70–80% of the context window — signal-to-noise ratio collapses. This threshold is currently invisible to users. Claude OS makes it visible, measurable, and actionable.
-  </p>
-  <div class="stat-row">
-    <div class="stat-cell">
-      <div class="stat-num" style="color:var(--green)">200k</div>
-      <div class="stat-label">token context window, Claude 3.5 Sonnet</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num" style="color:var(--amber)">~80%</div>
-      <div class="stat-label">utilisation at garbage threshold</div>
-    </div>
-    <div class="stat-cell">
-      <div class="stat-num" style="color:var(--red)">0</div>
-      <div class="stat-label">native tools showing you this right now</div>
-    </div>
-  </div>
-</section>
-
-<!-- SIGNAL -->
-<section id="signal">
-  <div class="section-label">02 — The signal</div>
-  <h2 class="section-title">The context efficiency curve.</h2>
-  <p class="section-body">
-    Per-session quality proxy (output token density, latency, self-correction rate) plotted against cumulative context utilisation. The inflection point is measurable. Claude OS detects it with a rolling regression and surfaces the GC threshold before you cross it.
-  </p>
-  <div class="chart-wrap">
-    <div class="chart-header">
-      <span class="chart-title">output quality proxy vs. ctx utilisation — single session</span>
-      <div class="chart-legend">
-        <span><span class="legend-dot" style="background:var(--green)"></span>clean</span>
-        <span><span class="legend-dot" style="background:var(--amber)"></span>soft gc</span>
-        <span><span class="legend-dot" style="background:var(--red)"></span>hard gc</span>
-      </div>
-    </div>
-    <canvas id="efficiency-canvas" height="180"></canvas>
-    <div class="chart-axes">
-      <span>0%</span>
-      <span>context utilisation →</span>
-      <span>100%</span>
-    </div>
-  </div>
-</section>
-
-<!-- GC STATES -->
-<section id="gc-states">
-  <div class="section-label">03 — GC taxonomy</div>
-  <h2 class="section-title">Four states. One state machine.</h2>
-  <p class="section-body">
-    Transitions are one-way within a session. A forked session starts Clean. Hard GC triggers a one-click Compact &amp; Fork — auto-compaction to a structured markdown summary, seeded into a new session as context.
-  </p>
-  <div class="gc-grid">
-    <div class="gc-card clean">
-      <div class="gc-card-header">
-        <div class="gc-card-indicator"></div>
-        <span class="gc-card-name">Clean</span>
-        <span class="gc-card-threshold">ctx &lt; 60%</span>
-      </div>
-      <p class="gc-card-desc">Full signal fidelity. Context accumulation is additive. No action needed.</p>
-      <span class="gc-card-action">→ continue normally</span>
-    </div>
-    <div class="gc-card soft">
-      <div class="gc-card-header">
-        <div class="gc-card-indicator"></div>
-        <span class="gc-card-name">Soft GC</span>
-        <span class="gc-card-threshold">ctx 60–80%</span>
-      </div>
-      <p class="gc-card-desc">Signal degradation beginning. Stale context accumulating. Consider compaction.</p>
-      <span class="gc-card-action">→ summarise thread, compact</span>
-    </div>
-    <div class="gc-card hard">
-      <div class="gc-card-header">
-        <div class="gc-card-indicator"></div>
-        <span class="gc-card-name">Hard GC</span>
-        <span class="gc-card-threshold">ctx &gt; 80%</span>
-      </div>
-      <p class="gc-card-desc">Garbage threshold breached. Quality impact measurable. Fork recommended.</p>
-      <span class="gc-card-action">→ compact &amp; fork session</span>
-    </div>
-    <div class="gc-card aged">
-      <div class="gc-card-header">
-        <div class="gc-card-indicator"></div>
-        <span class="gc-card-name">Aged</span>
-        <span class="gc-card-threshold">closed, unresolved</span>
-      </div>
-      <p class="gc-card-desc">Session closed without outcome resolution. Archived to persistent memory.</p>
-      <span class="gc-card-action">→ export to CLAUDE.md</span>
-    </div>
-  </div>
-</section>
-
-<!-- ROADMAP -->
-<section id="roadmap">
-  <div class="section-label">04 — Roadmap</div>
-  <h2 class="section-title">Five phases.</h2>
-  <p class="section-body">From a CLI proof-of-concept to an open-source, Homebrew-installable macOS utility. With an MCP server surface so Claude can read its own context health.</p>
-
-  <div class="roadmap">
-    <div class="phase current">
-      <div>
-        <div class="phase-num current">Phase 0</div>
-        <div class="phase-current-badge">▸ current</div>
-      </div>
-      <div>
-        <div class="phase-title">Proof of Concept</div>
-        <ul class="phase-items">
-          <li>Anthropic Messages API wrapper — per-turn token capture</li>
-          <li>Session-level context utilisation % in real time</li>
-          <li>Quality proxy logging: length, latency, self-correction rate</li>
-          <li>SQLite store + efficiency curve notebook</li>
-        </ul>
-      </div>
-    </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 1</div></div>
-      <div>
-        <div class="phase-title">Menu Bar Sprite</div>
-        <ul class="phase-items">
-          <li>macOS menu bar app — Swift / AppKit NSStatusItem</li>
-          <li>Real-time context depth indicator, colour-coded GC state</li>
-          <li>Native UNUserNotificationCenter alerts at threshold crossings</li>
-        </ul>
-      </div>
-    </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 2</div></div>
-      <div>
-        <div class="phase-title">Activity Monitor Window</div>
-        <ul class="phase-items">
-          <li>Full panel: sortable session list, live efficiency curve chart</li>
-          <li>Electron + React, IPC to SQLite, macOS vibrancy material</li>
-          <li>Turn-by-turn breakdown, GC event log</li>
-        </ul>
-      </div>
-    </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 3</div></div>
-      <div>
-        <div class="phase-title">Compaction Engine</div>
-        <ul class="phase-items">
-          <li>One-click Compact &amp; Fork — auto-generates structured context summary</li>
-          <li>Smart compaction prompts per project type (coding, research, writing)</li>
-          <li>Persistent memory export → markdown or CLAUDE.md append</li>
-        </ul>
-      </div>
-    </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 4</div></div>
-      <div>
-        <div class="phase-title">Outcomes Layer</div>
-        <ul class="phase-items">
-          <li>User-configurable outcome definitions per session type</li>
-          <li>Cost-per-outcome reporting: API spend / resolved outcomes</li>
-          <li>Stalled session detection: high ctx depth + no outcome progress</li>
-        </ul>
-      </div>
-    </div>
-    <div class="phase">
-      <div><div class="phase-num">Phase 5</div></div>
-      <div>
-        <div class="phase-title">Public Release + Research</div>
-        <ul class="phase-items">
-          <li>MCP server: Claude can query its own context health in real time</li>
-          <li>Empirical write-up: efficiency curves across session types and models</li>
-          <li>Homebrew tap: <code style="font-size:12px;color:var(--text-3)">brew install claude-os</code></li>
-        </ul>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- FOOTER -->
-<footer>
-  <div class="footer-left">
-    <div>Claude OS — <span>v0.1</span></div>
-    <div>Built by <span>Tai Lin</span> · <span>@taiganf</span> · HighFi · Toronto</div>
-    <div>June 2026</div>
-  </div>
-  <div class="footer-right">
-    <a href="https://github.com/taiganf" target="_blank" rel="noopener">GitHub</a>
-    <a href="#signal">How it works</a>
-    <a href="#roadmap">Roadmap</a>
-  </div>
-</footer>
-
-<script>
-  // ── Efficiency curve chart ──
-  const canvas = document.getElementById('efficiency-canvas');
-  const ctx = canvas.getContext('2d');
-
-  function drawChart() {
-    const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.parentElement.getBoundingClientRect();
-    const W = rect.width - 48;
-    const H = 180;
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    canvas.width = W * dpr;
-    canvas.height = H * dpr;
-    ctx.scale(dpr, dpr);
-
-    ctx.clearRect(0, 0, W, H);
-
-    const PAD = { top: 16, right: 16, bottom: 8, left: 40 };
-    const cW = W - PAD.left - PAD.right;
-    const cH = H - PAD.top - PAD.bottom;
-
-    // grid lines
-    ctx.strokeStyle = 'rgba(255,255,255,0.05)';
-    ctx.lineWidth = 0.5;
-    for (let i = 0; i <= 4; i++) {
-      const y = PAD.top + (cH / 4) * i;
-      ctx.beginPath();
-      ctx.moveTo(PAD.left, y);
-      ctx.lineTo(PAD.left + cW, y);
-      ctx.stroke();
-    }
-
-    // threshold lines
-    const x60 = PAD.left + cW * 0.60;
-    const x80 = PAD.left + cW * 0.80;
-
-    ctx.strokeStyle = 'rgba(255,149,0,0.3)';
-    ctx.lineWidth = 1;
-    ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(x60, PAD.top); ctx.lineTo(x60, PAD.top + cH); ctx.stroke();
-
-    ctx.strokeStyle = 'rgba(255,59,48,0.3)';
-    ctx.beginPath(); ctx.moveTo(x80, PAD.top); ctx.lineTo(x80, PAD.top + cH); ctx.stroke();
-    ctx.setLineDash([]);
-
-    // threshold labels
-    ctx.fillStyle = 'rgba(255,149,0,0.6)';
-    ctx.font = '10px SF Mono, Monaco, monospace';
-    ctx.fillText('60%', x60 + 4, PAD.top + 12);
-    ctx.fillStyle = 'rgba(255,59,48,0.6)';
-    ctx.fillText('80%', x80 + 4, PAD.top + 12);
-
-    // quality curve data — rises early, peaks ~45%, then degrades with noise
-    const pts = [];
-    for (let i = 0; i <= 60; i++) {
-      const t = i / 60;
-      let q;
-      if (t < 0.45) {
-        q = 0.55 + t * 0.9 + (Math.random() - 0.5) * 0.06;
-      } else {
-        const decay = (t - 0.45) * 1.8;
-        q = 0.96 - decay * decay + (Math.random() - 0.5) * 0.08;
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Claude OS — Context Monitor for Claude Sessions</title>
+    <style>
+      :root {
+        --bg: #0d0d0f;
+        --surface: #1c1c1e;
+        --surface-2: #242426;
+        --surface-3: #2c2c2e;
+        --border: rgba(255, 255, 255, 0.08);
+        --border-med: rgba(255, 255, 255, 0.12);
+        --text: #f2f2f7;
+        --text-2: #aeaeb2;
+        --text-3: #636366;
+        --green: #34c759;
+        --amber: #ff9500;
+        --red: #ff3b30;
+        --green-dim: rgba(52, 199, 89, 0.15);
+        --amber-dim: rgba(255, 149, 0, 0.15);
+        --red-dim: rgba(255, 59, 48, 0.15);
+        --mono: "SF Mono", "Monaco", "Cascadia Code", "Fira Code", monospace;
+        --sans:
+          -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
       }
-      q = Math.max(0.05, Math.min(1, q));
-      pts.push({ x: PAD.left + cW * t, y: PAD.top + cH * (1 - q) });
-    }
 
-    // draw colored segments
-    const segments = [
-      { end: Math.floor(60 * 0.60), color: '#34c759' },
-      { end: Math.floor(60 * 0.80), color: '#ff9500' },
-      { end: 60,                    color: '#ff3b30' },
-    ];
-
-    let start = 0;
-    for (const seg of segments) {
-      ctx.beginPath();
-      ctx.strokeStyle = seg.color;
-      ctx.lineWidth = 2;
-      ctx.lineJoin = 'round';
-      ctx.lineCap = 'round';
-      for (let i = start; i <= seg.end && i < pts.length; i++) {
-        if (i === start) ctx.moveTo(pts[i].x, pts[i].y);
-        else ctx.lineTo(pts[i].x, pts[i].y);
+      * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
       }
-      ctx.stroke();
 
-      // fill under
-      ctx.beginPath();
-      for (let i = start; i <= seg.end && i < pts.length; i++) {
-        if (i === start) ctx.moveTo(pts[i].x, pts[i].y);
-        else ctx.lineTo(pts[i].x, pts[i].y);
+      html {
+        scroll-behavior: smooth;
       }
-      const endIdx = Math.min(seg.end, pts.length - 1);
-      ctx.lineTo(pts[endIdx].x, PAD.top + cH);
-      ctx.lineTo(pts[start].x, PAD.top + cH);
-      ctx.closePath();
-      ctx.fillStyle = seg.color.replace(')', ', 0.07)').replace('rgb(', 'rgba(').replace('#34c759', 'rgba(52,199,89,0.07)').replace('#ff9500', 'rgba(255,149,0,0.07)').replace('#ff3b30', 'rgba(255,59,48,0.07)');
-      ctx.fill();
 
-      start = seg.end;
-    }
-
-    // y-axis label
-    ctx.save();
-    ctx.fillStyle = 'rgba(99,99,102,0.8)';
-    ctx.font = '10px SF Mono, Monaco, monospace';
-    ctx.translate(12, PAD.top + cH / 2);
-    ctx.rotate(-Math.PI / 2);
-    ctx.textAlign = 'center';
-    ctx.fillText('quality', 0, 0);
-    ctx.restore();
-  }
-
-  drawChart();
-  window.addEventListener('resize', drawChart);
-
-  // ── Animate bar 2 (product-spec-q3) slowly filling toward hard GC ──
-  let bar2w = 67;
-  const bar2el = document.getElementById('bar-2');
-  const pct2el = document.getElementById('pct-2');
-  const badge2el = document.getElementById('badge-2');
-
-  const animBar2 = setInterval(() => {
-    bar2w += 0.08;
-    if (bar2w >= 80) {
-      bar2el.style.background = 'var(--red)';
-      badge2el.className = 'gc-badge gc-hard';
-      badge2el.textContent = 'Hard GC ⚠';
-      clearInterval(animBar2);
-    } else if (bar2w >= 70) {
-      bar2el.style.background = 'var(--amber)';
-    }
-    bar2el.style.width = bar2w.toFixed(1) + '%';
-    pct2el.textContent = Math.round(bar2w) + '%';
-  }, 120);
-
-  // ── Smooth scroll for nav anchors ──
-  document.querySelectorAll('a[href^="#"]').forEach(a => {
-    a.addEventListener('click', e => {
-      const target = document.querySelector(a.getAttribute('href'));
-      if (target) {
-        e.preventDefault();
-        target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 15px;
+        line-height: 1.6;
+        -webkit-font-smoothing: antialiased;
       }
-    });
-  });
-</script>
-</body>
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+
+      /* ── NAV ── */
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 32px;
+        height: 48px;
+        background: rgba(13, 13, 15, 0.85);
+        backdrop-filter: blur(20px) saturate(180%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        border-bottom: 0.5px solid var(--border);
+      }
+
+      .nav-logo {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+      }
+
+      .nav-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--green);
+        box-shadow: 0 0 8px var(--green);
+        animation: pulse-dot 2s ease-in-out infinite;
+      }
+
+      @keyframes pulse-dot {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.4;
+        }
+      }
+
+      .nav-links {
+        display: flex;
+        align-items: center;
+        gap: 24px;
+        font-size: 12px;
+        color: var(--text-2);
+      }
+
+      .nav-links a:hover {
+        color: var(--text);
+      }
+
+      /* ── HERO ── */
+      .hero {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 120px 32px 80px;
+        text-align: center;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .hero::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background:
+          radial-gradient(
+            ellipse 600px 400px at 50% 30%,
+            rgba(52, 199, 89, 0.04) 0%,
+            transparent 70%
+          ),
+          repeating-linear-gradient(
+            0deg,
+            transparent,
+            transparent 39px,
+            rgba(255, 255, 255, 0.018) 39px,
+            rgba(255, 255, 255, 0.018) 40px
+          ),
+          repeating-linear-gradient(
+            90deg,
+            transparent,
+            transparent 39px,
+            rgba(255, 255, 255, 0.018) 39px,
+            rgba(255, 255, 255, 0.018) 40px
+          );
+        pointer-events: none;
+      }
+
+      .hero-eyebrow {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        color: var(--green);
+        margin-bottom: 20px;
+        opacity: 0;
+        animation: fade-up 0.6s ease forwards 0.1s;
+      }
+
+      .hero-title {
+        font-size: clamp(48px, 8vw, 88px);
+        font-weight: 700;
+        letter-spacing: -0.04em;
+        line-height: 1;
+        margin-bottom: 20px;
+        opacity: 0;
+        animation: fade-up 0.6s ease forwards 0.2s;
+      }
+
+      .hero-title span {
+        color: var(--text-3);
+      }
+
+      .hero-sub {
+        font-size: 18px;
+        color: var(--text-2);
+        max-width: 560px;
+        line-height: 1.5;
+        margin-bottom: 48px;
+        font-weight: 400;
+        letter-spacing: -0.01em;
+        opacity: 0;
+        animation: fade-up 0.6s ease forwards 0.3s;
+      }
+
+      @keyframes fade-up {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* ── CONTEXT METER (hero visual) ── */
+      .context-monitor {
+        width: 100%;
+        max-width: 680px;
+        background: var(--surface);
+        border: 0.5px solid var(--border-med);
+        border-radius: 12px;
+        overflow: hidden;
+        margin-bottom: 48px;
+        opacity: 0;
+        animation: fade-up 0.6s ease forwards 0.4s;
+      }
+
+      .monitor-titlebar {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 16px;
+        border-bottom: 0.5px solid var(--border);
+        background: var(--surface-2);
+      }
+
+      .traffic-light {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: var(--surface-3);
+      }
+
+      .monitor-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-3);
+        flex: 1;
+        text-align: center;
+        letter-spacing: 0.02em;
+      }
+
+      .monitor-body {
+        padding: 20px 24px;
+      }
+
+      .session-row {
+        display: grid;
+        grid-template-columns: 180px 1fr 80px 60px 80px;
+        gap: 12px;
+        align-items: center;
+        padding: 10px 0;
+        border-bottom: 0.5px solid var(--border);
+        font-family: var(--mono);
+        font-size: 12px;
+      }
+
+      .session-row:last-child {
+        border-bottom: none;
+      }
+
+      .session-row.header {
+        color: var(--text-3);
+        font-size: 11px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding-bottom: 8px;
+      }
+
+      .session-name {
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .ctx-bar-wrap {
+        position: relative;
+        height: 6px;
+        background: var(--surface-3);
+        border-radius: 3px;
+        overflow: hidden;
+      }
+
+      .ctx-bar {
+        height: 100%;
+        border-radius: 3px;
+        transition:
+          width 0.3s ease,
+          background 0.3s ease;
+      }
+
+      .ctx-pct {
+        color: var(--text-2);
+        text-align: right;
+      }
+
+      .gc-badge {
+        font-size: 10px;
+        padding: 2px 7px;
+        border-radius: 4px;
+        font-weight: 500;
+        letter-spacing: 0.02em;
+        text-align: center;
+      }
+
+      .gc-clean {
+        background: var(--green-dim);
+        color: var(--green);
+      }
+      .gc-soft {
+        background: var(--amber-dim);
+        color: var(--amber);
+      }
+      .gc-hard {
+        background: var(--red-dim);
+        color: var(--red);
+      }
+      .gc-aged {
+        background: rgba(99, 99, 102, 0.2);
+        color: var(--text-3);
+      }
+
+      .tokens-col {
+        color: var(--text-2);
+        text-align: right;
+      }
+
+      /* ── CTAs ── */
+      .ctas {
+        display: flex;
+        gap: 12px;
+        opacity: 0;
+        animation: fade-up 0.6s ease forwards 0.55s;
+      }
+
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-size: 13px;
+        font-weight: 500;
+        letter-spacing: -0.01em;
+        cursor: pointer;
+        transition: all 0.15s ease;
+      }
+
+      .btn-primary {
+        background: var(--text);
+        color: var(--bg);
+      }
+
+      .btn-primary:hover {
+        background: rgba(242, 242, 247, 0.9);
+        transform: translateY(-1px);
+      }
+
+      .btn-secondary {
+        background: transparent;
+        color: var(--text-2);
+        border: 0.5px solid var(--border-med);
+      }
+
+      .btn-secondary:hover {
+        color: var(--text);
+        border-color: rgba(255, 255, 255, 0.2);
+        background: var(--surface);
+      }
+
+      /* ── SECTIONS ── */
+      section {
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 100px 32px;
+        border-top: 0.5px solid var(--border);
+      }
+
+      .section-label {
+        font-family: var(--mono);
+        font-size: 11px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: var(--text-3);
+        margin-bottom: 20px;
+      }
+
+      .section-title {
+        font-size: clamp(28px, 4vw, 40px);
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        line-height: 1.15;
+        margin-bottom: 16px;
+      }
+
+      .section-body {
+        font-size: 16px;
+        color: var(--text-2);
+        max-width: 560px;
+        line-height: 1.65;
+      }
+
+      /* ── PROBLEM ── */
+      .problem-quote {
+        font-size: clamp(20px, 3vw, 26px);
+        font-weight: 500;
+        letter-spacing: -0.02em;
+        line-height: 1.35;
+        color: var(--text);
+        margin: 32px 0;
+        padding-left: 20px;
+        border-left: 2px solid var(--red);
+      }
+
+      .stat-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1px;
+        background: var(--border);
+        border: 0.5px solid var(--border);
+        border-radius: 10px;
+        overflow: hidden;
+        margin-top: 40px;
+      }
+
+      .stat-cell {
+        background: var(--surface);
+        padding: 24px 20px;
+      }
+
+      .stat-num {
+        font-family: var(--mono);
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: -0.03em;
+        color: var(--text);
+        margin-bottom: 4px;
+      }
+
+      .stat-label {
+        font-size: 12px;
+        color: var(--text-3);
+        line-height: 1.4;
+      }
+
+      /* ── SIGNAL / CHART ── */
+      .chart-wrap {
+        margin-top: 48px;
+        background: var(--surface);
+        border: 0.5px solid var(--border-med);
+        border-radius: 12px;
+        padding: 24px;
+      }
+
+      .chart-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 20px;
+      }
+
+      .chart-title {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-3);
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+      }
+
+      .chart-legend {
+        display: flex;
+        gap: 16px;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-3);
+      }
+
+      .legend-dot {
+        display: inline-block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        margin-right: 4px;
+        vertical-align: middle;
+      }
+
+      #efficiency-canvas {
+        width: 100%;
+        display: block;
+      }
+
+      .chart-axes {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 8px;
+        font-family: var(--mono);
+        font-size: 10px;
+        color: var(--text-3);
+      }
+
+      /* ── GC STATES ── */
+      .gc-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 12px;
+        margin-top: 40px;
+      }
+
+      .gc-card {
+        background: var(--surface);
+        border: 0.5px solid var(--border);
+        border-radius: 10px;
+        padding: 20px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .gc-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+      }
+
+      .gc-card.clean::before {
+        background: var(--green);
+      }
+      .gc-card.soft::before {
+        background: var(--amber);
+      }
+      .gc-card.hard::before {
+        background: var(--red);
+      }
+      .gc-card.aged::before {
+        background: var(--text-3);
+      }
+
+      .gc-card-header {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 10px;
+      }
+
+      .gc-card-indicator {
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        flex-shrink: 0;
+      }
+
+      .clean .gc-card-indicator {
+        background: var(--green);
+        box-shadow: 0 0 6px var(--green);
+      }
+      .soft .gc-card-indicator {
+        background: var(--amber);
+        box-shadow: 0 0 6px var(--amber);
+      }
+      .hard .gc-card-indicator {
+        background: var(--red);
+        box-shadow: 0 0 6px var(--red);
+      }
+      .aged .gc-card-indicator {
+        background: var(--text-3);
+      }
+
+      .gc-card-name {
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: -0.01em;
+      }
+
+      .gc-card-threshold {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-3);
+        margin-left: auto;
+      }
+
+      .gc-card-desc {
+        font-size: 13px;
+        color: var(--text-2);
+        line-height: 1.5;
+        margin-bottom: 12px;
+      }
+
+      .gc-card-action {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-3);
+        padding: 6px 10px;
+        background: var(--surface-2);
+        border-radius: 5px;
+        display: inline-block;
+      }
+
+      /* ── ROADMAP ── */
+      .roadmap {
+        margin-top: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 0;
+      }
+
+      .phase {
+        display: grid;
+        grid-template-columns: 120px 1fr;
+        gap: 24px;
+        padding: 24px 0;
+        border-bottom: 0.5px solid var(--border);
+        position: relative;
+      }
+
+      .phase:last-child {
+        border-bottom: none;
+      }
+
+      .phase-num {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-3);
+        letter-spacing: 0.06em;
+        padding-top: 2px;
+      }
+
+      .phase-num.current {
+        color: var(--green);
+      }
+
+      .phase-current-badge {
+        display: inline-block;
+        font-size: 10px;
+        background: var(--green-dim);
+        color: var(--green);
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-top: 6px;
+        letter-spacing: 0.04em;
+      }
+
+      .phase-shipped-badge {
+        display: inline-block;
+        font-size: 10px;
+        background: rgba(255,255,255,0.04);
+        color: var(--text-3);
+        padding: 2px 6px;
+        border-radius: 4px;
+        margin-top: 6px;
+        letter-spacing: 0.04em;
+      }
+
+      .phase.done { opacity: 0.45; }
+      .phase.done .phase-num { color: var(--text-3); }
+
+      .phase-title {
+        font-size: 15px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        margin-bottom: 6px;
+      }
+
+      .phase-items {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .phase-items li {
+        font-size: 13px;
+        color: var(--text-2);
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+
+      .phase-items li::before {
+        content: "·";
+        color: var(--text-3);
+        flex-shrink: 0;
+      }
+
+      .phase.current .phase-items li::before {
+        content: "▸";
+        color: var(--green);
+        font-size: 10px;
+      }
+
+      .phase:not(.current) {
+        opacity: 0.5;
+      }
+
+      .phase.current {
+        opacity: 1;
+      }
+
+      /* ── FOOTER ── */
+      footer {
+        border-top: 0.5px solid var(--border);
+        padding: 40px 32px;
+        max-width: 800px;
+        margin: 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+
+      .footer-left {
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-3);
+        line-height: 1.8;
+      }
+
+      .footer-left span {
+        color: var(--text-2);
+      }
+
+      .footer-right {
+        display: flex;
+        gap: 20px;
+        font-size: 12px;
+        color: var(--text-3);
+      }
+
+      .footer-right a:hover {
+        color: var(--text-2);
+      }
+
+      /* ── SEPARATOR ── */
+      .section-divider {
+        max-width: 800px;
+        margin: 0 auto;
+        height: 0;
+        border: none;
+        border-top: 0.5px solid var(--border);
+      }
+
+      /* ── GET STARTED / PATHWAYS ── */
+      :root {
+        --blue: #0a84ff;
+        --blue-dim: rgba(10, 132, 255, 0.12);
+      }
+
+      .pathway-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 12px;
+        margin-top: 40px;
+      }
+
+      @media (max-width: 640px) {
+        .pathway-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      .pathway-card {
+        background: var(--surface);
+        border: 0.5px solid var(--border);
+        border-radius: 10px;
+        padding: 20px;
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        position: relative;
+        overflow: hidden;
+      }
+
+      .pathway-card::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 2px;
+      }
+
+      .pathway-card.p1::before {
+        background: var(--green);
+      }
+      .pathway-card.p2::before {
+        background: var(--amber);
+      }
+      .pathway-card.p3::before {
+        background: var(--blue);
+      }
+
+      .pathway-eyebrow {
+        font-family: var(--mono);
+        font-size: 10px;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+      }
+
+      .p1 .pathway-eyebrow {
+        color: var(--green);
+      }
+      .p2 .pathway-eyebrow {
+        color: var(--amber);
+      }
+      .p3 .pathway-eyebrow {
+        color: var(--blue);
+      }
+
+      .pathway-title {
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: -0.01em;
+        color: var(--text);
+        line-height: 1.3;
+      }
+
+      .pathway-desc {
+        font-size: 12px;
+        color: var(--text-2);
+        line-height: 1.55;
+        flex: 1;
+      }
+
+      .pathway-code {
+        background: var(--surface-2);
+        border: 0.5px solid var(--border);
+        border-radius: 6px;
+        padding: 10px 12px;
+        font-family: var(--mono);
+        font-size: 11px;
+        color: var(--text-2);
+        line-height: 1.7;
+        white-space: pre;
+        overflow-x: auto;
+      }
+
+      .pathway-gets {
+        list-style: none;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+      }
+
+      .pathway-gets li {
+        font-size: 11px;
+        color: var(--text-3);
+        display: flex;
+        align-items: baseline;
+        gap: 6px;
+      }
+
+      .pathway-gets li .chk {
+        color: var(--green);
+      }
+      .pathway-gets li .crs {
+        color: var(--text-3);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- NAV -->
+    <nav>
+      <div class="nav-logo">
+        <div class="nav-dot"></div>
+        Claude OS
+      </div>
+      <div class="nav-links">
+        <a href="#signal">Signal</a>
+        <a href="#get-started">Get started</a>
+        <a href="#gc-states">GC States</a>
+        <a href="#roadmap">Roadmap</a>
+        <a href="https://github.com/taiganf" target="_blank" rel="noopener">GitHub ↗</a>
+      </div>
+    </nav>
+
+    <!-- HERO -->
+    <div class="hero">
+      <div class="hero-eyebrow">v0.4 — Phase 4 in progress</div>
+      <h1 class="hero-title">Claude <span>OS</span></h1>
+      <p class="hero-sub">
+        A macOS activity monitor for Claude sessions. Real-time token economics, context window
+        health, and GC state — before quality degrades.
+      </p>
+
+      <div class="context-monitor">
+        <div class="monitor-titlebar">
+          <div class="traffic-light" style="background: #ff5f57"></div>
+          <div class="traffic-light" style="background: #febc2e"></div>
+          <div class="traffic-light" style="background: #28c840"></div>
+          <div class="monitor-title">claude os — activity monitor</div>
+        </div>
+        <div class="monitor-body">
+          <div class="session-row header">
+            <span>session</span>
+            <span>context depth</span>
+            <span style="text-align: right">tokens</span>
+            <span style="text-align: right">ctx %</span>
+            <span style="text-align: center">gc state</span>
+          </div>
+          <div class="session-row" id="row-1">
+            <span class="session-name">refactor-auth-middleware</span>
+            <div class="ctx-bar-wrap">
+              <div class="ctx-bar" id="bar-1" style="width: 43%; background: var(--green)"></div>
+            </div>
+            <span class="tokens-col">84.2k</span>
+            <span class="ctx-pct" id="pct-1">43%</span>
+            <span class="gc-badge gc-clean" id="badge-1">Clean</span>
+          </div>
+          <div class="session-row" id="row-2">
+            <span class="session-name">product-spec-q3</span>
+            <div class="ctx-bar-wrap">
+              <div class="ctx-bar" id="bar-2" style="width: 67%; background: var(--amber)"></div>
+            </div>
+            <span class="tokens-col">130.5k</span>
+            <span class="ctx-pct" id="pct-2">67%</span>
+            <span class="gc-badge gc-soft" id="badge-2">Soft GC</span>
+          </div>
+          <div class="session-row" id="row-3">
+            <span class="session-name">debug-memory-leak-ios</span>
+            <div class="ctx-bar-wrap">
+              <div class="ctx-bar" id="bar-3" style="width: 88%; background: var(--red)"></div>
+            </div>
+            <span class="tokens-col">171.6k</span>
+            <span class="ctx-pct" id="pct-3">88%</span>
+            <span class="gc-badge gc-hard" id="badge-3">Hard GC ⚠</span>
+          </div>
+          <div class="session-row" id="row-4">
+            <span class="session-name" style="color: var(--text-3)">design-system-tokens</span>
+            <div class="ctx-bar-wrap">
+              <div class="ctx-bar" id="bar-4" style="width: 100%; background: var(--text-3)"></div>
+            </div>
+            <span class="tokens-col" style="color: var(--text-3)">194.4k</span>
+            <span class="ctx-pct" id="pct-4" style="color: var(--text-3)">—</span>
+            <span class="gc-badge gc-aged" id="badge-4">Aged</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="ctas">
+        <a href="https://github.com/taiganf" target="_blank" rel="noopener" class="btn btn-primary"
+          >View on GitHub</a
+        >
+        <a href="#signal" class="btn btn-secondary">How it works</a>
+      </div>
+    </div>
+
+    <!-- PROBLEM -->
+    <section id="problem">
+      <div class="section-label">01 — The problem</div>
+      <h2 class="section-title">You can't see the cliff<br />until you're falling.</h2>
+      <div class="problem-quote">
+        "Past ~80% context utilisation, the model attends equally to stale retries and abandoned
+        threads as it does to your original goals. Quality degrades. Silently."
+      </div>
+      <p class="section-body">
+        Every Claude session has a context efficiency curve. In the early portion, each input
+        produces high-quality, well-grounded output. Past the garbage threshold — typically 70–80%
+        of the context window — signal-to-noise ratio collapses. This threshold is currently
+        invisible to users. Claude OS makes it visible, measurable, and actionable.
+      </p>
+      <div class="stat-row">
+        <div class="stat-cell">
+          <div class="stat-num" style="color: var(--green)">200k</div>
+          <div class="stat-label">token context window, Claude 3.5 Sonnet</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num" style="color: var(--amber)">~80%</div>
+          <div class="stat-label">utilisation at garbage threshold</div>
+        </div>
+        <div class="stat-cell">
+          <div class="stat-num" style="color: var(--red)">0</div>
+          <div class="stat-label">native tools showing you this right now</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- SIGNAL -->
+    <section id="signal">
+      <div class="section-label">02 — The signal</div>
+      <h2 class="section-title">The context efficiency curve.</h2>
+      <p class="section-body">
+        Per-session quality proxy (output token density, latency, self-correction rate) plotted
+        against cumulative context utilisation. The inflection point is measurable. Claude OS
+        detects it with a rolling regression and surfaces the GC threshold before you cross it.
+      </p>
+      <div class="chart-wrap">
+        <div class="chart-header">
+          <span class="chart-title">output quality proxy vs. ctx utilisation — single session</span>
+          <div class="chart-legend">
+            <span><span class="legend-dot" style="background: var(--green)"></span>clean</span>
+            <span><span class="legend-dot" style="background: var(--amber)"></span>soft gc</span>
+            <span><span class="legend-dot" style="background: var(--red)"></span>hard gc</span>
+          </div>
+        </div>
+        <canvas id="efficiency-canvas" height="180"></canvas>
+        <div class="chart-axes">
+          <span>0%</span>
+          <span>context utilisation →</span>
+          <span>100%</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- GET STARTED -->
+    <section id="get-started">
+      <div class="section-label">03 — Get started</div>
+      <h2 class="section-title">Three ways in.</h2>
+      <p class="section-body">
+        Choose the path that fits your workflow. Most setups combine all three — backfill once to
+        seed history, wire the hook for live data, reach for the wrapper when you need compaction.
+      </p>
+      <div class="pathway-grid">
+        <div class="pathway-card p1">
+          <div class="pathway-eyebrow">Path 01 — Backfill</div>
+          <div class="pathway-title">One-time historical import</div>
+          <p class="pathway-desc">
+            Run once to bootstrap the database with every Claude session you've ever had. Instantly
+            see full history in the Activity Monitor — no code changes required.
+          </p>
+          <div class="pathway-code">
+            bun run ingest # walks ~/.claude/projects/ # idempotent — safe to re-run
+          </div>
+          <ul class="pathway-gets">
+            <li><span class="chk">✓</span> Full session history</li>
+            <li><span class="chk">✓</span> ctx depth + GC states for past work</li>
+            <li><span class="crs">—</span> No live updates going forward</li>
+          </ul>
+        </div>
+
+        <div class="pathway-card p2">
+          <div class="pathway-eyebrow">Path 02 — Zero-config live</div>
+          <div class="pathway-title">Ongoing hook instrumentation</div>
+          <p class="pathway-desc">
+            Wire one Stop hook entry in
+            <code style="font-family: var(--mono); font-size: 10px">~/.claude/settings.json</code>.
+            Every Claude Code turn writes to SQLite automatically — no API key, no interruptions, no
+            code changes.
+          </p>
+          <div class="pathway-code">
+            bun run setup # registers hook-stop.ts in # ~/.claude/settings.json
+          </div>
+          <ul class="pathway-gets">
+            <li><span class="chk">✓</span> Per-turn live data as you work</li>
+            <li><span class="chk">✓</span> Zero friction — fires on every stop</li>
+            <li><span class="crs">—</span> No policy-driven compaction</li>
+          </ul>
+        </div>
+
+        <div class="pathway-card p3">
+          <div class="pathway-eyebrow">Path 03 — SDK wrapper</div>
+          <div class="pathway-title">Programmatic instrumentation + compaction</div>
+          <p class="pathway-desc">
+            Wrap your Anthropic client directly. Same metrics as the hook, plus policy-driven
+            compaction — automatic memory distillation on context thresholds or semantic triggers.
+          </p>
+          <div class="pathway-code">
+            import { createInstrumentedClient } from "@claude-os/core"; const client =
+            createInstrumentedClient( process.env.ANTHROPIC_API_KEY, { cwd: process.cwd() } );
+          </div>
+          <ul class="pathway-gets">
+            <li>
+              <span class="chk">✓</span> Full live pipeline +
+              <code style="font-family: var(--mono); font-size: 10px">getHealth()</code>
+            </li>
+            <li><span class="chk">✓</span> Policy-driven compaction on trigger</li>
+            <li><span class="chk">✓</span> Custom memory schemas per project</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- GC STATES -->
+    <section id="gc-states">
+      <div class="section-label">04 — GC taxonomy</div>
+      <h2 class="section-title">Four states. One state machine.</h2>
+      <p class="section-body">
+        Transitions are one-way within a session. A forked session starts Clean. Hard GC triggers a
+        one-click Compact &amp; Fork — auto-compaction to a structured markdown summary, seeded into
+        a new session as context.
+      </p>
+      <div class="gc-grid">
+        <div class="gc-card clean">
+          <div class="gc-card-header">
+            <div class="gc-card-indicator"></div>
+            <span class="gc-card-name">Clean</span>
+            <span class="gc-card-threshold">ctx &lt; 60%</span>
+          </div>
+          <p class="gc-card-desc">
+            Full signal fidelity. Context accumulation is additive. No action needed.
+          </p>
+          <span class="gc-card-action">→ continue normally</span>
+        </div>
+        <div class="gc-card soft">
+          <div class="gc-card-header">
+            <div class="gc-card-indicator"></div>
+            <span class="gc-card-name">Soft GC</span>
+            <span class="gc-card-threshold">ctx 60–80%</span>
+          </div>
+          <p class="gc-card-desc">
+            Signal degradation beginning. Stale context accumulating. Consider compaction.
+          </p>
+          <span class="gc-card-action">→ summarise thread, compact</span>
+        </div>
+        <div class="gc-card hard">
+          <div class="gc-card-header">
+            <div class="gc-card-indicator"></div>
+            <span class="gc-card-name">Hard GC</span>
+            <span class="gc-card-threshold">ctx &gt; 80%</span>
+          </div>
+          <p class="gc-card-desc">
+            Garbage threshold breached. Quality impact measurable. Fork recommended.
+          </p>
+          <span class="gc-card-action">→ compact &amp; fork session</span>
+        </div>
+        <div class="gc-card aged">
+          <div class="gc-card-header">
+            <div class="gc-card-indicator"></div>
+            <span class="gc-card-name">Aged</span>
+            <span class="gc-card-threshold">closed, unresolved</span>
+          </div>
+          <p class="gc-card-desc">
+            Session closed without outcome resolution. Archived to persistent memory.
+          </p>
+          <span class="gc-card-action">→ export to CLAUDE.md</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ROADMAP -->
+    <section id="roadmap">
+      <div class="section-label">05 — Roadmap</div>
+      <h2 class="section-title">Six phases.</h2>
+      <p class="section-body">
+        From a CLI proof-of-concept to an open-source, Homebrew-installable macOS utility. With an
+        MCP server surface so Claude can read its own context health.
+      </p>
+
+      <div class="roadmap">
+        <div class="phase done">
+          <div>
+            <div class="phase-num">Phase 0</div>
+            <div class="phase-shipped-badge">✓ shipped</div>
+          </div>
+          <div>
+            <div class="phase-title">Proof of Concept</div>
+            <ul class="phase-items">
+              <li>Anthropic Messages API wrapper — per-turn token capture</li>
+              <li>Session-level context utilisation % in real time</li>
+              <li>Quality proxy logging: length, latency, self-correction rate</li>
+              <li>SQLite store + efficiency curve notebook</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase done">
+          <div>
+            <div class="phase-num">Phase 1</div>
+            <div class="phase-shipped-badge">✓ shipped</div>
+          </div>
+          <div>
+            <div class="phase-title">Menu Bar + Live Feed</div>
+            <ul class="phase-items">
+              <li>Electron tray icon — real-time context depth, colour-coded GC state</li>
+              <li>Stop hook wired into Claude Code — per-turn SQLite writes</li>
+              <li>Hono API server on :7842, polling every 5s</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase done">
+          <div>
+            <div class="phase-num">Phase 2</div>
+            <div class="phase-shipped-badge">✓ shipped</div>
+          </div>
+          <div>
+            <div class="phase-title">Activity Monitor Window</div>
+            <ul class="phase-items">
+              <li>Full panel: session list, live efficiency curve chart</li>
+              <li>Electron + React renderer, macOS vibrancy material</li>
+              <li>Turn-by-turn breakdown, GC event log</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase done">
+          <div>
+            <div class="phase-num">Phase 3</div>
+            <div class="phase-shipped-badge">✓ shipped</div>
+          </div>
+          <div>
+            <div class="phase-title">Compaction Engine</div>
+            <ul class="phase-items">
+              <li>Policy-driven triggers: context threshold, turn cadence, semantic classifiers</li>
+              <li>Memory distillation — per-project memory files written on trigger</li>
+              <li>Unified turn pipeline: single source of truth for live + backfill metrics</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase current">
+          <div>
+            <div class="phase-num current">Phase 4</div>
+            <div class="phase-current-badge">▸ current</div>
+          </div>
+          <div>
+            <div class="phase-title">DX + Policy UI</div>
+            <ul class="phase-items">
+              <li>Activity Monitor redesign — grouped by Project → Session, expandable context depth per session</li>
+              <li>Policy editor UI — configure and mutate compaction policies per project without touching JSON</li>
+              <li>Outcomes layer: cost-per-outcome reporting, stalled session detection</li>
+              <li>User-configurable outcome definitions per session type</li>
+            </ul>
+          </div>
+        </div>
+        <div class="phase">
+          <div><div class="phase-num">Phase 5</div></div>
+          <div>
+            <div class="phase-title">Public Release + Research</div>
+            <ul class="phase-items">
+              <li>MCP server: Claude can query its own context health in real time</li>
+              <li>Empirical write-up: efficiency curves across session types and models</li>
+              <li>
+                Homebrew tap:
+                <code style="font-size: 12px; color: var(--text-3)">brew install claude-os</code>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- FOOTER -->
+    <footer>
+      <div class="footer-left">
+        <div>Claude OS — <span>v0.1</span></div>
+        <div>Built by <span>Tai Lin</span> · <span>@taiganf</span> · HighFi · Toronto</div>
+        <div>June 2026</div>
+      </div>
+      <div class="footer-right">
+        <a href="https://github.com/taiganf" target="_blank" rel="noopener">GitHub</a>
+        <a href="#signal">How it works</a>
+        <a href="#roadmap">Roadmap</a>
+      </div>
+    </footer>
+
+    <script>
+      // ── Efficiency curve chart ──
+      const canvas = document.getElementById("efficiency-canvas");
+      const ctx = canvas.getContext("2d");
+
+      function drawChart() {
+        const dpr = window.devicePixelRatio || 1;
+        const rect = canvas.parentElement.getBoundingClientRect();
+        const W = rect.width - 48;
+        const H = 180;
+        canvas.style.width = W + "px";
+        canvas.style.height = H + "px";
+        canvas.width = W * dpr;
+        canvas.height = H * dpr;
+        ctx.scale(dpr, dpr);
+
+        ctx.clearRect(0, 0, W, H);
+
+        const PAD = { top: 16, right: 16, bottom: 8, left: 40 };
+        const cW = W - PAD.left - PAD.right;
+        const cH = H - PAD.top - PAD.bottom;
+
+        // grid lines
+        ctx.strokeStyle = "rgba(255,255,255,0.05)";
+        ctx.lineWidth = 0.5;
+        for (let i = 0; i <= 4; i++) {
+          const y = PAD.top + (cH / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(PAD.left, y);
+          ctx.lineTo(PAD.left + cW, y);
+          ctx.stroke();
+        }
+
+        // threshold lines
+        const x60 = PAD.left + cW * 0.6;
+        const x80 = PAD.left + cW * 0.8;
+
+        ctx.strokeStyle = "rgba(255,149,0,0.3)";
+        ctx.lineWidth = 1;
+        ctx.setLineDash([4, 4]);
+        ctx.beginPath();
+        ctx.moveTo(x60, PAD.top);
+        ctx.lineTo(x60, PAD.top + cH);
+        ctx.stroke();
+
+        ctx.strokeStyle = "rgba(255,59,48,0.3)";
+        ctx.beginPath();
+        ctx.moveTo(x80, PAD.top);
+        ctx.lineTo(x80, PAD.top + cH);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // threshold labels
+        ctx.fillStyle = "rgba(255,149,0,0.6)";
+        ctx.font = "10px SF Mono, Monaco, monospace";
+        ctx.fillText("60%", x60 + 4, PAD.top + 12);
+        ctx.fillStyle = "rgba(255,59,48,0.6)";
+        ctx.fillText("80%", x80 + 4, PAD.top + 12);
+
+        // quality curve data — rises early, peaks ~45%, then degrades with noise
+        const pts = [];
+        for (let i = 0; i <= 60; i++) {
+          const t = i / 60;
+          let q;
+          if (t < 0.45) {
+            q = 0.55 + t * 0.9 + (Math.random() - 0.5) * 0.06;
+          } else {
+            const decay = (t - 0.45) * 1.8;
+            q = 0.96 - decay * decay + (Math.random() - 0.5) * 0.08;
+          }
+          q = Math.max(0.05, Math.min(1, q));
+          pts.push({ x: PAD.left + cW * t, y: PAD.top + cH * (1 - q) });
+        }
+
+        // draw colored segments
+        const segments = [
+          { end: Math.floor(60 * 0.6), color: "#34c759" },
+          { end: Math.floor(60 * 0.8), color: "#ff9500" },
+          { end: 60, color: "#ff3b30" },
+        ];
+
+        let start = 0;
+        for (const seg of segments) {
+          ctx.beginPath();
+          ctx.strokeStyle = seg.color;
+          ctx.lineWidth = 2;
+          ctx.lineJoin = "round";
+          ctx.lineCap = "round";
+          for (let i = start; i <= seg.end && i < pts.length; i++) {
+            if (i === start) ctx.moveTo(pts[i].x, pts[i].y);
+            else ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          ctx.stroke();
+
+          // fill under
+          ctx.beginPath();
+          for (let i = start; i <= seg.end && i < pts.length; i++) {
+            if (i === start) ctx.moveTo(pts[i].x, pts[i].y);
+            else ctx.lineTo(pts[i].x, pts[i].y);
+          }
+          const endIdx = Math.min(seg.end, pts.length - 1);
+          ctx.lineTo(pts[endIdx].x, PAD.top + cH);
+          ctx.lineTo(pts[start].x, PAD.top + cH);
+          ctx.closePath();
+          ctx.fillStyle = seg.color
+            .replace(")", ", 0.07)")
+            .replace("rgb(", "rgba(")
+            .replace("#34c759", "rgba(52,199,89,0.07)")
+            .replace("#ff9500", "rgba(255,149,0,0.07)")
+            .replace("#ff3b30", "rgba(255,59,48,0.07)");
+          ctx.fill();
+
+          start = seg.end;
+        }
+
+        // y-axis label
+        ctx.save();
+        ctx.fillStyle = "rgba(99,99,102,0.8)";
+        ctx.font = "10px SF Mono, Monaco, monospace";
+        ctx.translate(12, PAD.top + cH / 2);
+        ctx.rotate(-Math.PI / 2);
+        ctx.textAlign = "center";
+        ctx.fillText("quality", 0, 0);
+        ctx.restore();
+      }
+
+      drawChart();
+      window.addEventListener("resize", drawChart);
+
+      // ── Animate bar 2 (product-spec-q3) slowly filling toward hard GC ──
+      let bar2w = 67;
+      const bar2el = document.getElementById("bar-2");
+      const pct2el = document.getElementById("pct-2");
+      const badge2el = document.getElementById("badge-2");
+
+      const animBar2 = setInterval(() => {
+        bar2w += 0.08;
+        if (bar2w >= 80) {
+          bar2el.style.background = "var(--red)";
+          badge2el.className = "gc-badge gc-hard";
+          badge2el.textContent = "Hard GC ⚠";
+          clearInterval(animBar2);
+        } else if (bar2w >= 70) {
+          bar2el.style.background = "var(--amber)";
+        }
+        bar2el.style.width = bar2w.toFixed(1) + "%";
+        pct2el.textContent = Math.round(bar2w) + "%";
+      }, 120);
+
+      // ── Smooth scroll for nav anchors ──
+      document.querySelectorAll('a[href^="#"]').forEach((a) => {
+        a.addEventListener("click", (e) => {
+          const target = document.querySelector(a.getAttribute("href"));
+          if (target) {
+            e.preventDefault();
+            target.scrollIntoView({ behavior: "smooth", block: "start" });
+          }
+        });
+      });
+    </script>
+  </body>
 </html>
