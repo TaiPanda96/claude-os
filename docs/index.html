@@ -642,7 +642,7 @@
       .phase-shipped-badge {
         display: inline-block;
         font-size: 10px;
-        background: rgba(255,255,255,0.04);
+        background: rgba(255, 255, 255, 0.04);
         color: var(--text-3);
         padding: 2px 6px;
         border-radius: 4px;
@@ -650,8 +650,12 @@
         letter-spacing: 0.04em;
       }
 
-      .phase.done { opacity: 0.45; }
-      .phase.done .phase-num { color: var(--text-3); }
+      .phase.done {
+        opacity: 0.45;
+      }
+      .phase.done .phase-num {
+        color: var(--text-3);
+      }
 
       .phase-title {
         font-size: 15px;
@@ -1015,7 +1019,9 @@
             Run once to bootstrap the database with every Claude session you've ever had. Instantly
             see full history in the Activity Monitor — no code changes required.
           </p>
-          <div class="pathway-code">bun run ingest<br># walks ~/.claude/projects/<br># idempotent — safe to re-run</div>
+          <div class="pathway-code">
+            bun run ingest # walks ~/.claude/projects/ # idempotent — safe to re-run
+          </div>
           <ul class="pathway-gets">
             <li><span class="chk">✓</span> Full session history</li>
             <li><span class="chk">✓</span> ctx depth + GC states for past work</li>
@@ -1032,7 +1038,9 @@
             Every Claude Code turn writes to SQLite automatically — no API key, no interruptions, no
             code changes.
           </p>
-          <div class="pathway-code">bun run setup<br># registers hook-stop.ts in<br># ~/.claude/settings.json</div>
+          <div class="pathway-code">
+            bun run setup # registers hook-stop.ts in # ~/.claude/settings.json
+          </div>
           <ul class="pathway-gets">
             <li><span class="chk">✓</span> Per-turn live data as you work</li>
             <li><span class="chk">✓</span> Zero friction — fires on every stop</li>
@@ -1047,7 +1055,10 @@
             Wrap your Anthropic client directly. Same metrics as the hook, plus policy-driven
             compaction — automatic memory distillation on context thresholds or semantic triggers.
           </p>
-          <div class="pathway-code">import { createInstrumentedClient }<br>  from "@claude-os/core";<br><br>const client = createInstrumentedClient(<br>  process.env.ANTHROPIC_API_KEY,<br>  { cwd: process.cwd() }<br>);</div>
+          <div class="pathway-code">
+            import { createInstrumentedClient } from "@claude-os/core"; const client =
+            createInstrumentedClient( process.env.ANTHROPIC_API_KEY, { cwd: process.cwd() } );
+          </div>
           <ul class="pathway-gets">
             <li>
               <span class="chk">✓</span> Full live pipeline +
@@ -1192,8 +1203,14 @@
           <div>
             <div class="phase-title">DX + Policy UI</div>
             <ul class="phase-items">
-              <li>Activity Monitor redesign — grouped by Project → Session, expandable context depth per session</li>
-              <li>Policy editor UI — configure and mutate compaction policies per project without touching JSON</li>
+              <li>
+                Activity Monitor redesign — grouped by Project → Session, expandable context depth
+                per session
+              </li>
+              <li>
+                Policy editor UI — configure and mutate compaction policies per project without
+                touching JSON
+              </li>
               <li>Outcomes layer: cost-per-outcome reporting, stalled session detection</li>
               <li>User-configurable outcome definitions per session type</li>
             </ul>
