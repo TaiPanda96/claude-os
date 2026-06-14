@@ -2,7 +2,7 @@
 
 > A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state tracking — before quality degrades.
 
-![Phase](https://img.shields.io/badge/phase-3%20%E2%80%94%20compaction%20engine-34c759?style=flat-square)
+![Phase](https://img.shields.io/badge/phase-4%20%E2%80%94%20policy%20UI-34c759?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
 ![Built with](https://img.shields.io/badge/built%20with-TypeScript%20%2B%20Swift-orange?style=flat-square)
 ![Status](https://img.shields.io/badge/status-active%20development-yellow?style=flat-square)
@@ -21,13 +21,13 @@ Claude OS makes it visible, measurable, and actionable.
 
 ## What it does
 
-- **Instruments** Claude Code sessions via hooks — captures input tokens, output tokens, cumulative context, latency, and stop reason per turn
+- **Instruments** Claude Code sessions via a `Stop` hook — captures input tokens, output tokens, cumulative context, latency, and stop reason per turn
 - **Computes** a session-level context utilisation percentage in real time
-- **Tracks** a quality proxy signal (output density, latency, self-correction markers) per turn
+- **Tracks** a quality proxy signal (output density, self-correction markers, turn-over-turn repetition) per turn
 - **Plots** the efficiency curve per session — showing exactly where quality inflects
 - **Surfaces** a four-state GC status: `Clean → Soft GC → Hard GC → Aged`
-- **Triggers** native macOS alerts when a session crosses a threshold
-- **Enables** one-click Compact & Fork — auto-generates a structured context summary and seeds a new session
+- **Organises** sessions by project topology — switch between a **By Project** tree and a flat **By Session** view, with per-project policy banners
+- **Runs** policy-driven compaction — configurable triggers (turn cadence, context threshold, semantic classifiers) distil turns into structured memory files under `~/.claude/projects/<cwd>/claude-os/memory/`
 
 ---
 
