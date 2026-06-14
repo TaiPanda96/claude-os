@@ -37,6 +37,11 @@ export interface Turn {
 }
 
 // Phrases that indicate the model is revising or hedging mid-response
+/**
+ * A Static List of Phrases that may indicate self-correction or hedging in the model's output.
+ * This is used as a heuristic signal for identifying turns where the model may be uncertain or revising its response,
+ * which can be a useful quality proxy for triggering compactions or other interventions. The list includes common phrases that suggest the model is changing its mind, clarifying, or acknowledging a mistake. Note that this is not an exhaustive list and may need to be updated over time as new patterns of self-correction emerge in model outputs.
+ */
 export const SELF_CORRECTION_MARKERS = [
   "actually,",
   "actually —",
@@ -54,7 +59,16 @@ export const SELF_CORRECTION_MARKERS = [
   "i misspoke",
   "to be clear,",
   "i need to correct",
+  "You're right,",
+  "I apologize,",
+  "i take that back",
+  "i need to correct myself",
 ] as const;
+
+export const GC_THRESHOLDS = {
+  soft: 0.6,
+  hard: 0.8,
+} as const;
 
 export interface GCEvent {
   id: string;
@@ -90,11 +104,6 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "claude-3-5-haiku-20241022": 200_000,
 };
 
-export const GC_THRESHOLDS = {
-  soft: 0.6,
-  hard: 0.8,
-} as const;
-
 export interface AssistantRecord {
   type: "assistant";
   uuid: string;
@@ -129,8 +138,6 @@ export function computeGCState(ctxPct: number): GCState {
   return "clean";
 }
 
-// ── Phase 4: policy-driven compaction ────────────────────────────────────────
-
 export interface Project {
   id: string;
   cwd: string;
@@ -139,13 +146,13 @@ export interface Project {
 }
 
 export enum TriggerTypeEnum {
-  TURN_CADENCE           = "turn_cadence",
-  CTX_THRESHOLD          = "ctx_threshold",
-  SEMANTIC_EVENT         = "semantic_event",
+  TURN_CADENCE = "turn_cadence",
+  CTX_THRESHOLD = "ctx_threshold",
+  SEMANTIC_EVENT = "semantic_event",
   ARCHITECTURAL_DECISION = "architectural_decision",
-  OUTCOME_RESOLVED       = "outcome_resolved",
-  COMBINED               = "combined",
-  MANUAL                 = "manual",
+  OUTCOME_RESOLVED = "outcome_resolved",
+  COMBINED = "combined",
+  MANUAL = "manual",
 }
 
 export type TriggerConfig =
@@ -154,67 +161,70 @@ export type TriggerConfig =
   | {
       triggerType: TriggerTypeEnum.SEMANTIC_EVENT;
       classifier: string;
-      min_ctx_pct: number;   // default 20
-      min_turns: number;     // default 5
+      min_ctx_pct: number; // default 20
+      min_turns: number; // default 5
     }
   | {
       triggerType: TriggerTypeEnum.ARCHITECTURAL_DECISION;
-      min_ctx_pct: number;   // default 20
-      min_turns: number;     // default 5
+      min_ctx_pct: number; // default 20
+      min_turns: number; // default 5
     }
   | {
       triggerType: TriggerTypeEnum.OUTCOME_RESOLVED;
-      min_ctx_pct: number;   // default 10
-      min_turns: number;     // default 5
+      min_ctx_pct: number; // default 10
+      min_turns: number; // default 5
     }
   | {
       triggerType: TriggerTypeEnum.COMBINED;
-      triggers: Exclude<TriggerConfig, { triggerType: TriggerTypeEnum.COMBINED }>[];
+      triggers: Exclude<
+        TriggerConfig,
+        { triggerType: TriggerTypeEnum.COMBINED }
+      >[];
       mode: "any" | "all";
     };
 
 export type UpdateMode = "overwrite" | "append" | "merge";
-export type DecayScope  = "session" | "project" | "permanent";
+export type DecayScope = "session" | "project" | "permanent";
 
 export interface MemoryFile {
-  filename:    string;
+  filename: string;
   description: string;
   update_mode: UpdateMode;
-  decay:       DecayScope;
-  max_tokens?: number;   // default 8000; merge existing file capped separately at 4000
+  decay: DecayScope;
+  max_tokens?: number; // default 8000; merge existing file capped separately at 4000
 }
 
 export interface CompactionPolicy {
-  id:             string;
-  project_id:     string;
-  name:           string;
-  active:         boolean;
-  triggers:       TriggerConfig[];
-  memory_schema:  MemoryFile[];
-  cooldown_turns: number;   // default 2
-  created_at:     string;
-  updated_at:     string;
+  id: string;
+  project_id: string;
+  name: string;
+  active: boolean;
+  triggers: TriggerConfig[];
+  memory_schema: MemoryFile[];
+  cooldown_turns: number; // default 2
+  created_at: string;
+  updated_at: string;
 }
 
 export type CompactionStatus = "running" | "completed" | "failed";
 
 export interface CompactionFileResult {
-  filename:      string;
-  update_mode:   UpdateMode;
+  filename: string;
+  update_mode: UpdateMode;
   bytes_written: number;
-  preview:       string;   // first 200 chars
+  preview: string; // first 200 chars
 }
 
 export interface CompactionEvent {
-  id:                string;
-  session_id:        string;
-  policy_id:         string;
-  triggered_by:      TriggerTypeEnum;
-  trigger_detail:    string;
-  files_written:     CompactionFileResult[];
+  id: string;
+  session_id: string;
+  policy_id: string;
+  triggered_by: TriggerTypeEnum;
+  trigger_detail: string;
+  files_written: CompactionFileResult[];
   tokens_at_trigger: number;
-  status:            CompactionStatus;
-  started_at:        string;
-  completed_at:      string | null;
-  error:             string | null;
+  status: CompactionStatus;
+  started_at: string;
+  completed_at: string | null;
+  error: string | null;
 }

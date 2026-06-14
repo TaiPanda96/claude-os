@@ -1,8 +1,9 @@
 {
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
+    // Override baseUrl to point to the monorepo root, so that path aliases work in scripts
     "baseUrl": "..",
-    "ignoreDeprecations": "6.0",
+    "ignoreDeprecations": "5.0",
     "paths": {
       "@claude-os/core": ["packages/core/src/index.ts"],
       "@claude-os/core/*": ["packages/core/src/*"]

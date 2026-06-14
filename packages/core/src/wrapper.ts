@@ -12,10 +12,11 @@ import {
   resolveProjectId,
 } from "./db.js";
 import { computeGCState, MODEL_CONTEXT_WINDOWS } from "./types.js";
-import { evaluateTriggers } from "./trigger-evaluator.js";
+import { evaluateCompactionTriggers } from "./evaluate-compaction-triggers.js";
 import type { Session, Turn, GCEvent, GCState } from "./types.js";
 import { bigramOverlap } from "./utils/bigram-overlap.js";
 import { countSelfCorrections } from "./utils/count-self-corrections.js";
+import { LlmPorts } from "./index.js";
 
 interface WrapperOptions {
   sessionName?: string;
@@ -23,6 +24,7 @@ interface WrapperOptions {
   forkedFrom?: string;
   cwd?: string;
   onGCStateChange?: (state: GCState, ctxPct: number) => void;
+  ports?: LlmPorts;
 }
 
 interface InstrumentedClient {
@@ -37,6 +39,21 @@ interface InstrumentedClient {
   close: () => void;
 }
 
+/**
+ * This wrapper around the Anthropic client captures metadata about each message turn
+ * and stores it in a SQLite database for later analysis.
+ * It also evaluates triggers for context window compaction and logs GC events.
+ * @param apiKeyOrClient - The API key or an instance of the Anthropic client.
+ * @param options - Configuration options for the wrapper.
+ * @returns An instrumented client that wraps the Anthropic client.
+ *
+ * @example
+ * const client = createInstrumentedClient("my-api-key", { sessionName: "Test Session" });
+ * const response = await client.messages.create({ model: "claude-2", input: [{ type: "text", text: "Hello" }] });
+ * console.log(response);
+ * console.log(client.getHealth());
+ * client.close();
+ */
 export function createInstrumentedClient(
   apiKeyOrClient?: string | Anthropic,
   options: WrapperOptions = {},
@@ -109,16 +126,20 @@ export function createInstrumentedClient(
       outputDensity: input_tokens > 0 ? output_tokens / input_tokens : 0,
     };
 
+    // Instrumentation for this turn is now captured in `turn`.
     insertTurn(db, turn);
+    // Update session's last active timestamp
     updateSessionLastActive(db, sessionId);
 
-    // Phase 4 — evaluate compaction triggers (non-blocking)
-    evaluateTriggers(
+    // Evaluate triggers for context window compaction
+    // This runs asynchronously and does not block the response to the current turn.
+    evaluateCompactionTriggers(
       db,
       sessionId,
       turn,
       outputText,
       options.cwd ?? process.cwd(),
+      options.ports,
     );
 
     const gcState = computeGCState(ctxPct);

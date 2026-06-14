@@ -14,10 +14,8 @@ const BUILT_IN_CLASSIFIERS: Record<string, string> = {
 // Tracks turns since last compaction per session to enforce cooldown
 const cooldownTracker = new Map<string, number>();
 
-// Called after every turn completes in wrapper.ts — fire and forget for semantic triggers
-
 /**
- * Evaluates whether any compaction triggers are met for the current turn, and if so, initiates the compaction workflow. This function performs the following steps:
+ * Evaluates whether any compaction triggers are met for the current turn, and if so, initiates the compaction workflow.
  * @param db - Database instance for querying session and policy info, and recording compaction events.
  * @param sessionId  - ID of the session this turn belongs to, used for looking up the relevant compaction policy and cooldown state.
  * @param turn  - The current turn object, containing metadata like turn index and context percentage, which may be used in trigger evaluation.
@@ -25,7 +23,7 @@ const cooldownTracker = new Map<string, number>();
  * @param cwd - The current working directory of the session, which may be relevant for determining file paths during compaction.
  * @param ports - An optional set of LLM ports for classification and summarization; defaults to the Anthropic implementations. This allows for flexibility in how triggers are evaluated and compactions are performed.
  */
-export function evaluateTriggers(
+export function evaluateCompactionTriggers(
   db: Database,
   sessionId: string,
   turn: Turn,
@@ -51,9 +49,9 @@ export function evaluateTriggers(
         sessionId,
         turn.turnIndex,
       );
+
       if (sinceLastCompaction < policy.cooldown_turns) return;
 
-      // Evaluate triggers
       for (const trigger of policy.triggers) {
         const { fired, detail } = await checkTrigger(
           trigger,

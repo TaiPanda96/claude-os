@@ -1,0 +1,28 @@
+# Dependencies & lockfiles
+node_modules/
+bun.lock
+bun.lockb
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+*.tsbuildinfo
+
+# Data & generated artifacts
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+analysis/sessions/
+docs/design-system/
+docs/specs/
+
+# Native app build dirs
+apps/menu-bar/DerivedData/
+apps/menu-bar/.build/
+apps/*/release/
+
+# Coverage
+coverage/
+.nyc_output/

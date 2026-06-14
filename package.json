@@ -19,10 +19,13 @@
     "ingest": "bun run scripts/ingest.ts",
     "ingest:stats": "bun run scripts/ingest.ts --stats",
     "ingest:verbose": "bun run scripts/ingest.ts --verbose",
-    "export": "bun run scripts/export.ts"
+    "export": "bun run scripts/export.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/bun": "^1.3.14",
+    "prettier": "3.8.4",
     "typescript": "^5.4.0"
   },
   "dependencies": {
