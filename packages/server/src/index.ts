@@ -35,19 +35,40 @@ app.use(
 
 app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
 
-app.get("/sessions", (c) => {
+app.get("/projects", (c) => {
   const db = getDb();
-  const sessions = db
+  const projects = db
     .prepare(
-      `
-    SELECT s.*,
-      (SELECT ctx_pct FROM turns WHERE session_id = s.id ORDER BY turn_index DESC LIMIT 1) as current_ctx_pct,
-      (SELECT COUNT(*) FROM turns WHERE session_id = s.id) as turn_count
-    FROM sessions s
-    ORDER BY last_active_at DESC
-  `,
+      `SELECT p.*,
+        COUNT(s.id) as session_count,
+        MAX(s.last_active_at) as last_active_at,
+        EXISTS(SELECT 1 FROM compaction_policies cp WHERE cp.project_id = p.id) as has_policy
+       FROM projects p
+       LEFT JOIN sessions s ON s.project_id = p.id
+       GROUP BY p.id
+       ORDER BY last_active_at DESC`,
     )
     .all();
+  return c.json(projects);
+});
+
+app.get("/sessions", (c) => {
+  const db = getDb();
+  const sinceDays = Number(c.req.query("since_days") ?? "7");
+  const since = sinceDays > 0 ? Date.now() - sinceDays * 86_400_000 : 0;
+  const sessions = db
+    .prepare(
+      `SELECT s.*,
+        p.id   as project_id,
+        p.name as project_name,
+        (SELECT ctx_pct FROM turns WHERE session_id = s.id ORDER BY turn_index DESC LIMIT 1) as current_ctx_pct,
+        (SELECT COUNT(*) FROM turns WHERE session_id = s.id) as turn_count
+       FROM sessions s
+       LEFT JOIN projects p ON p.id = s.project_id
+       WHERE s.last_active_at >= $since
+       ORDER BY s.last_active_at DESC`,
+    )
+    .all({ $since: since });
   return c.json(sessions);
 });
 
