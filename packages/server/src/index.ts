@@ -42,9 +42,12 @@ app.get("/projects", (c) => {
       `SELECT p.*,
         COUNT(s.id) as session_count,
         MAX(s.last_active_at) as last_active_at,
-        EXISTS(SELECT 1 FROM compaction_policies cp WHERE cp.project_id = p.id) as has_policy
+        (cp.id IS NOT NULL) as has_policy,
+        cp.name   as policy_name,
+        cp.active as policy_active
        FROM projects p
        LEFT JOIN sessions s ON s.project_id = p.id
+       LEFT JOIN compaction_policies cp ON cp.project_id = p.id
        GROUP BY p.id
        ORDER BY last_active_at DESC`,
     )

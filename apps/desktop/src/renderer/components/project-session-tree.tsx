@@ -1,9 +1,13 @@
 import React, { useState } from "react";
-import { SessionRow, GCState, gcState } from "../types.js";
+import { SessionRow, Project, GCState, gcState } from "../types.js";
 import { tokens, gc } from "../theme.js";
+
+type ViewMode = "project" | "session";
 
 interface Props {
   sessions: SessionRow[];
+  projects: Project[];
+  view: ViewMode;
   ttlDays: number;
   selected: string | null;
   onSelect: (id: string) => void;
@@ -47,6 +51,8 @@ function relativeTime(ms: number): string {
 
 export function ProjectSessionTree({
   sessions,
+  projects,
+  view,
   ttlDays,
   selected,
   onSelect,
@@ -56,6 +62,77 @@ export function ProjectSessionTree({
   const [showStale, setShowStale] = useState<Set<string>>(new Set());
 
   const cutoff = ttlDays > 0 ? Date.now() - ttlDays * 86_400_000 : 0;
+  const projectById = new Map(projects.map((p) => [p.id, p]));
+
+  if (sessions.length === 0) {
+    return (
+      <div style={styles.empty}>
+        No sessions in the last {ttlDays} day{ttlDays !== 1 ? "s" : ""} — try a longer window or run{" "}
+        <code style={{ color: tokens.highlight }}>bun run ingest</code>
+      </div>
+    );
+  }
+
+  // ── Session view: one flat, urgency-sorted list, project shown inline ──────────
+  if (view === "session") {
+    const fresh = sessions
+      .filter((s) => s.last_active_at >= cutoff)
+      .sort((a, b) => urgencyRank(a) - urgencyRank(b) || b.last_active_at - a.last_active_at);
+    const stale = sessions
+      .filter((s) => s.last_active_at < cutoff)
+      .sort((a, b) => b.last_active_at - a.last_active_at);
+    const isShowingStale = showStale.has("__all__");
+
+    return (
+      <div style={styles.container}>
+        <div style={styles.flatHeader}>
+          <span style={styles.flatHeaderLabel}>All sessions</span>
+          <span style={styles.flatHeaderCount}>
+            {fresh.length} active{stale.length > 0 ? ` · ${stale.length} older` : ""}
+          </span>
+        </div>
+
+        {fresh.map((s) => (
+          <SessionRowComponent
+            key={s.id}
+            session={s}
+            isSelected={s.id === selected}
+            onSelect={onSelect}
+            showProject
+          />
+        ))}
+
+        {stale.length > 0 && (
+          <button
+            style={styles.staleToggle}
+            onClick={() =>
+              setShowStale((prev) => {
+                const next = new Set(prev);
+                next.has("__all__") ? next.delete("__all__") : next.add("__all__");
+                return next;
+              })
+            }
+          >
+            {isShowingStale ? "▴ hide older" : `▾ ${stale.length} older`}
+          </button>
+        )}
+
+        {isShowingStale &&
+          stale.map((s) => (
+            <SessionRowComponent
+              key={s.id}
+              session={s}
+              isSelected={s.id === selected}
+              onSelect={onSelect}
+              showProject
+              dimmed
+            />
+          ))}
+      </div>
+    );
+  }
+
+  // ── Project view: sessions grouped under their project, with policy banner ─────
 
   // Group by project_id client-side
   const groupMap = new Map<string, ProjectGroup>();
@@ -73,24 +150,13 @@ export function ProjectSessionTree({
 
   // Sort groups: worst GC state first, then by most recent session
   const groups = [...groupMap.values()].sort((a, b) => {
-    const aw = worstState(a.sessions);
-    const bw = worstState(b.sessions);
     const urgencyMap = { hard_gc: 0, soft_gc: 1, clean: 2 };
-    const ud = urgencyMap[aw] - urgencyMap[bw];
+    const ud = urgencyMap[worstState(a.sessions)] - urgencyMap[worstState(b.sessions)];
     if (ud !== 0) return ud;
     const aLast = Math.max(...a.sessions.map((s) => s.last_active_at));
     const bLast = Math.max(...b.sessions.map((s) => s.last_active_at));
     return bLast - aLast;
   });
-
-  if (groups.length === 0) {
-    return (
-      <div style={styles.empty}>
-        No sessions in the last {ttlDays} day{ttlDays !== 1 ? "s" : ""} — try a longer window or run{" "}
-        <code style={{ color: tokens.highlight }}>bun run ingest</code>
-      </div>
-    );
-  }
 
   return (
     <div style={styles.container}>
@@ -99,6 +165,7 @@ export function ProjectSessionTree({
         const isCollapsed = collapsed.has(key);
         const worst = worstState(group.sessions);
         const gcColors = gc[worst];
+        const project = group.id ? projectById.get(group.id) ?? null : null;
 
         // Partition into fresh vs stale
         const fresh = group.sessions
@@ -111,7 +178,7 @@ export function ProjectSessionTree({
 
         return (
           <div key={key} style={styles.group}>
-            {/* Project header */}
+            {/* Project header — identity + aggregate state */}
             <div
               style={styles.projectHeader}
               onClick={() =>
@@ -130,6 +197,7 @@ export function ProjectSessionTree({
               >
                 ▾
               </span>
+              <span style={styles.projectKindTag}>PROJECT</span>
               <span style={{ ...styles.projectDot, background: gcColors.dot }} />
               <span style={styles.projectName}>{group.name}</span>
               <span style={styles.projectCount}>
@@ -145,19 +213,15 @@ export function ProjectSessionTree({
               >
                 {GC_LABEL[worst]}
               </span>
-              {/* Policy button — stops propagation so collapse doesn't fire */}
-              {group.id && (
-                <button
-                  style={styles.policyBtn}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSelectProject(group.id!);
-                  }}
-                >
-                  ⚙ Policy
-                </button>
-              )}
             </div>
+
+            {/* Policy banner — project-level, always visible (distinct from sessions) */}
+            {group.id && project && (
+              <PolicyBanner
+                project={project}
+                onEdit={() => onSelectProject(group.id!)}
+              />
+            )}
 
             {/* Session rows */}
             {!isCollapsed && (
@@ -205,17 +269,63 @@ export function ProjectSessionTree({
   );
 }
 
+// ── Policy banner ───────────────────────────────────────────────────────────────
+// Project-scoped strip: surfaces whether a compaction policy is configured and
+// active, and hosts the project-level actions. Deliberately styled apart from
+// session rows so the project/session topology reads clearly.
+
+function PolicyBanner({
+  project,
+  onEdit,
+}: {
+  project: Project | null;
+  onEdit: () => void;
+}) {
+  const hasPolicy = project?.has_policy === 1;
+  const isActive = project?.policy_active === 1;
+
+  const status = !hasPolicy
+    ? { dot: tokens.muted, text: tokens.muted, label: "No policy configured" }
+    : isActive
+      ? { dot: gc.clean.dot, text: gc.clean.text, label: `Policy active${project?.policy_name ? ` · ${project.policy_name}` : ""}` }
+      : { dot: gc.soft_gc.dot, text: gc.soft_gc.text, label: `Policy paused${project?.policy_name ? ` · ${project.policy_name}` : ""}` };
+
+  return (
+    <div style={styles.policyBanner}>
+      <span style={styles.indent} />
+      <span style={{ ...styles.policyStatusDot, background: status.dot }} />
+      <span style={{ ...styles.policyStatusText, color: status.text }}>{status.label}</span>
+
+      <div style={styles.policyActions}>
+        <button style={styles.editPolicyBtn} onClick={onEdit}>
+          {hasPolicy ? "Edit Policy" : "Configure Policy"}
+        </button>
+        {/* Placeholder — context-window optimisation lands in a later phase */}
+        <button
+          style={styles.optimizeBtn}
+          disabled
+          title="Coming soon — automatically compact the active context window"
+        >
+          Optimize Context Window
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ── Session row ───────────────────────────────────────────────────────────────
 
 function SessionRowComponent({
   session: s,
   isSelected,
   onSelect,
+  showProject = false,
   dimmed = false,
 }: {
   session: SessionRow;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  showProject?: boolean;
   dimmed?: boolean;
 }) {
   const pct = s.current_ctx_pct ?? 0;
@@ -243,6 +353,9 @@ function SessionRowComponent({
         >
           {s.name ?? "unnamed"}
         </span>
+        {showProject && (
+          <span style={styles.projectTag}>{s.project_name ?? "Ungrouped"}</span>
+        )}
         <span style={styles.sessionId}>{s.id.slice(0, 6)}</span>
       </div>
 
@@ -334,6 +447,17 @@ const styles: Record<string, React.CSSProperties> = {
     flexShrink: 0,
     lineHeight: 1,
   },
+  // Topology label — marks this row as the project (vs. session) altitude
+  projectKindTag: {
+    fontSize: 8,
+    fontWeight: 700,
+    letterSpacing: "0.12em",
+    color: tokens.muted,
+    background: tokens.surface2,
+    borderRadius: tokens.radiusXs,
+    padding: "2px 5px",
+    flexShrink: 0,
+  },
   projectDot: {
     width: 8,
     height: 8,
@@ -368,7 +492,38 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: "0.04em",
     flexShrink: 0,
   },
-  policyBtn: {
+  // Policy banner — sits between project header and its sessions
+  policyBanner: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "7px 20px 7px 0",
+    background: tokens.void,
+    borderBottom: `0.5px solid ${tokens.surface1}`,
+    minHeight: 34,
+  },
+  policyStatusDot: {
+    width: 6,
+    height: 6,
+    borderRadius: "50%",
+    flexShrink: 0,
+  },
+  policyStatusText: {
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
+    letterSpacing: "0.03em",
+    flex: 1,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+  },
+  policyActions: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    flexShrink: 0,
+  },
+  editPolicyBtn: {
     background: tokens.surface2,
     border: `0.5px solid ${tokens.border}`,
     borderRadius: tokens.radiusSm,
@@ -376,11 +531,50 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: tokens.fsMicro,
     fontFamily: tokens.fontMono,
     fontWeight: 500,
-    letterSpacing: "0.04em",
+    letterSpacing: "0.03em",
     cursor: "pointer",
-    padding: "4px 9px",
+    padding: "4px 10px",
     lineHeight: 1,
-    flexShrink: 0,
+  },
+  optimizeBtn: {
+    background: "transparent",
+    border: `0.5px dashed ${tokens.surface2}`,
+    borderRadius: tokens.radiusSm,
+    color: tokens.muted,
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
+    letterSpacing: "0.03em",
+    cursor: "not-allowed",
+    padding: "4px 10px",
+    lineHeight: 1,
+    opacity: 0.55,
+  },
+  // Flat-list header for session view
+  flatHeader: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    padding: "12px 20px",
+    minHeight: 44,
+    background: tokens.surface0,
+    position: "sticky" as const,
+    top: 0,
+    zIndex: 1,
+    borderBottom: `0.5px solid ${tokens.border}`,
+  },
+  flatHeaderLabel: {
+    fontSize: 14,
+    fontWeight: 600,
+    color: tokens.highlight,
+    fontFamily: SANS,
+    letterSpacing: "-0.01em",
+    flex: 1,
+  },
+  flatHeaderCount: {
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
+    fontFamily: tokens.fontMono,
+    letterSpacing: "0.02em",
   },
   sessionRow: {
     display: "grid",
@@ -419,6 +613,21 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 500,
     fontFamily: SANS,
     letterSpacing: "-0.01em",
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+  },
+  // Project provenance tag — only shown in flat session view
+  projectTag: {
+    fontSize: tokens.fsMicro,
+    color: tokens.muted,
+    fontFamily: tokens.fontMono,
+    background: tokens.surface1,
+    border: `0.5px solid ${tokens.surface2}`,
+    borderRadius: tokens.radiusXs,
+    padding: "1px 6px",
+    flexShrink: 0,
+    maxWidth: 140,
     overflow: "hidden",
     textOverflow: "ellipsis",
     whiteSpace: "nowrap" as const,
