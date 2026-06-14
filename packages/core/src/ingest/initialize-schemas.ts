@@ -32,7 +32,9 @@ export function initializeSchemas(db: Database) {
   ctx_pct_at_trigger REAL NOT NULL, created_at INTEGER NOT NULL
 )`);
   db.run(`CREATE INDEX IF NOT EXISTS idx_turns_session ON turns(session_id)`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_gc_events_session ON gc_events(session_id)`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_gc_events_session ON gc_events(session_id)`,
+  );
 
   // ── Phase 4: policy-driven compaction ────────────────────────────────────────
 
@@ -47,12 +49,16 @@ export function initializeSchemas(db: Database) {
 
   // Add project_id to sessions if not yet present (safe on existing DBs)
   try {
-    db.run(`ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)`);
+    db.run(
+      `ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)`,
+    );
   } catch {
     // Column already exists — ignore
   }
 
-  db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)`);
+  db.run(
+    `CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)`,
+  );
 
   db.run(`
     CREATE TABLE IF NOT EXISTS compaction_policies (
