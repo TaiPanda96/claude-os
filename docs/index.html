@@ -877,11 +877,11 @@
 
     <!-- HERO -->
     <div class="hero">
-      <div class="hero-eyebrow">v0.4 — Phase 4 in progress</div>
-      <h1 class="hero-title">Claude <span>OS</span></h1>
+      <div class="hero-eyebrow">Claude OS — v0.4 — Phase 4 in progress</div>
+      <h1 class="hero-title">Quality peaks<br /><span>at 37% context.</span></h1>
       <p class="hero-sub">
-        A macOS activity monitor for Claude sessions. Real-time token economics, context window
-        health, and GC state — before quality degrades.
+        Most developers don't find out until 80%. Claude OS instruments your sessions in real time
+        so you know before you cross the line.
       </p>
 
       <div class="context-monitor">
@@ -951,23 +951,24 @@
       <div class="section-label">01 — The problem</div>
       <h2 class="section-title">You can't see the cliff<br />until you're falling.</h2>
       <div class="problem-quote">
-        "Past ~80% context utilisation, the model attends equally to stale retries and abandoned
-        threads as it does to your original goals. Quality degrades. Silently."
+        "Quality degrades at ~37% context utilisation — a full 40 points before the 80% threshold
+        where most teams start to notice. The model is already attending to stale retries and
+        abandoned threads. You just can't see it yet."
       </div>
       <p class="section-body">
-        Every Claude session has a context efficiency curve. In the early portion, each input
-        produces high-quality, well-grounded output. Past the garbage threshold — typically 70–80%
-        of the context window — signal-to-noise ratio collapses. This threshold is currently
-        invisible to users. Claude OS makes it visible, measurable, and actionable.
+        Every Claude session has a context efficiency curve. Per-turn analysis across real sessions
+        shows the inflection point appears around 37% utilisation — far earlier than conventional
+        wisdom. Past that threshold, signal-to-noise ratio collapses silently. Claude OS makes the
+        curve visible, measurable, and actionable before you cross it.
       </p>
       <div class="stat-row">
         <div class="stat-cell">
-          <div class="stat-num" style="color: var(--green)">200k</div>
-          <div class="stat-label">token context window, Claude 3.5 Sonnet</div>
+          <div class="stat-num" style="color: var(--green)">~37%</div>
+          <div class="stat-label">context utilisation when quality starts to degrade</div>
         </div>
         <div class="stat-cell">
           <div class="stat-num" style="color: var(--amber)">~80%</div>
-          <div class="stat-label">utilisation at garbage threshold</div>
+          <div class="stat-label">when most developers notice something is wrong</div>
         </div>
         <div class="stat-cell">
           <div class="stat-num" style="color: var(--red)">0</div>
@@ -1241,7 +1242,7 @@
         <div>June 2026</div>
       </div>
       <div class="footer-right">
-        <a href="https://github.com/taiganf" target="_blank" rel="noopener">GitHub</a>
+        <a href="https://github.com/TaiPanda96/claude-os" target="_blank" rel="noopener">GitHub</a>
         <a href="#signal">How it works</a>
         <a href="#roadmap">Roadmap</a>
       </div>
