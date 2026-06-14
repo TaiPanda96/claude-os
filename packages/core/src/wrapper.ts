@@ -113,7 +113,13 @@ export function createInstrumentedClient(
     updateSessionLastActive(db, sessionId);
 
     // Phase 4 — evaluate compaction triggers (non-blocking)
-    evaluateTriggers(db, sessionId, turn, outputText, options.cwd ?? process.cwd());
+    evaluateTriggers(
+      db,
+      sessionId,
+      turn,
+      outputText,
+      options.cwd ?? process.cwd(),
+    );
 
     const gcState = computeGCState(ctxPct);
     if (gcState !== lastGCState && gcState !== "clean") {

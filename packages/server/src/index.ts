@@ -2,9 +2,15 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { v4 as uuidv4 } from "uuid";
 import {
-  getDb, getSession, getSessionTurns, computeSessionHealthStats,
-  getPolicy, upsertPolicy, getCompactionEvents, resolveProjectId,
-  runCompaction, TriggerTypeEnum,
+  getDb,
+  getSession,
+  getSessionTurns,
+  computeSessionHealthStats,
+  getPolicy,
+  upsertPolicy,
+  getCompactionEvents,
+  compaction,
+  TriggerTypeEnum,
 } from "@claude-os/core";
 import type { CompactionPolicy } from "@claude-os/core";
 
@@ -16,7 +22,16 @@ import type { CompactionPolicy } from "@claude-os/core";
 const app = new Hono();
 const PORT = 7842;
 
-app.use("/*", cors({ origin: ["http://localhost:3000", "http://localhost:5173", "app://claude-os"] }));
+app.use(
+  "/*",
+  cors({
+    origin: [
+      "http://localhost:3000",
+      "http://localhost:5173",
+      "app://claude-os",
+    ],
+  }),
+);
 
 app.get("/health", (c) => c.json({ status: "ok", version: "0.1.0" }));
 
@@ -77,7 +92,10 @@ app.get("/projects/:id/policy", (c) => {
 app.put("/projects/:id/policy", async (c) => {
   const db = getDb();
   const projectId = c.req.param("id");
-  const body = await c.req.json() as Omit<CompactionPolicy, "id" | "project_id" | "created_at" | "updated_at">;
+  const body = (await c.req.json()) as Omit<
+    CompactionPolicy,
+    "id" | "project_id" | "created_at" | "updated_at"
+  >;
   const existing = getPolicy(db, projectId);
   const now = new Date().toISOString();
   const policy: CompactionPolicy = {
@@ -106,7 +124,8 @@ app.post("/sessions/:id/compact", async (c) => {
   const sessionId = c.req.param("id");
   const session = getSession(db, sessionId);
   if (!session) return c.json({ error: "session not found" }, 404);
-  if (!session.projectId) return c.json({ error: "session has no project" }, 400);
+  if (!session.projectId)
+    return c.json({ error: "session has no project" }, 400);
 
   const policy = getPolicy(db, session.projectId);
   if (!policy || !policy.active)
@@ -114,12 +133,16 @@ app.post("/sessions/:id/compact", async (c) => {
 
   const turns = getSessionTurns(db, sessionId);
   const lastTurn = turns[turns.length - 1];
-  if (!turns.length || !lastTurn) return c.json({ error: "no turns in session" }, 400);
+  if (!turns.length || !lastTurn)
+    return c.json({ error: "no turns in session" }, 400);
 
   // Run in background, return immediately with event id
-  const eventPromise = runCompaction(
-    db, sessionId, policy,
-    TriggerTypeEnum.MANUAL, "manual compaction",
+  const eventPromise = compaction(
+    db,
+    sessionId,
+    policy,
+    TriggerTypeEnum.MANUAL,
+    "manual compaction",
     lastTurn.cumulativeTokens,
     (session as any).cwd ?? "",
   );
@@ -127,7 +150,11 @@ app.post("/sessions/:id/compact", async (c) => {
   // Fire and forget — client polls /compaction-events for result
   eventPromise.catch((err: unknown) => console.error("[compact]", err));
 
-  return c.json({ status: "started", session_id: sessionId, policy_id: policy.id });
+  return c.json({
+    status: "started",
+    session_id: sessionId,
+    policy_id: policy.id,
+  });
 });
 
 export default { port: PORT, fetch: app.fetch };

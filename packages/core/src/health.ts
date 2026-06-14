@@ -1,9 +1,5 @@
 import type { Turn } from "./types.js";
-
-// ── Constants — must stay in sync with apps/desktop/src/renderer/quality.ts ──
-const OUTPUT_DENSITY_ANCHOR = 0.4;
-const SELF_CORRECTION_ANCHOR = 5;
-const QUALITY_FLOOR = 0.3;
+import { qualityForTurn, QUALITY_FLOOR } from "./domain/quality-proxy.js";
 
 export interface SessionHealthStats {
   currentQuality: number;
@@ -12,14 +8,6 @@ export interface SessionHealthStats {
   turnsToInflection: number | null;  // projected turns until quality crosses QUALITY_FLOOR
   peakQuality: number;
   peakCtxPct: number;                // percentage (0–100)
-}
-
-function qualityForTurn(t: Turn): number {
-  return Math.round(
-    (Math.min(1, (t.outputDensity ?? 0) / OUTPUT_DENSITY_ANCHOR) * 0.5 +
-      (1 - Math.min(1, (t.selfCorrectionCount ?? 0) / SELF_CORRECTION_ANCHOR)) * 0.3 +
-      (1 - (t.repetitionScore ?? 0)) * 0.2) * 100,
-  ) / 100;
 }
 
 export function computeSessionHealthStats(turns: Turn[]): SessionHealthStats {

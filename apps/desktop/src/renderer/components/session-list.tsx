@@ -120,7 +120,10 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
-  function renderFlat(list: SessionRow[], rankLabel: (s: SessionRow, i: number) => string) {
+  function renderFlat(
+    list: SessionRow[],
+    rankLabel: (s: SessionRow, i: number) => string,
+  ) {
     return list.map((s, i) => (
       <div key={s.id} style={styles.rankedRow}>
         <span style={styles.rank}>{rankLabel(s, i)}</span>
@@ -157,7 +160,9 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
       {view === "project" &&
         sortedGroups.map(([groupName, groupSessions]) => {
           const isOpen = openGroups.has(groupName);
-          const maxCtx = Math.max(...groupSessions.map((s) => s.current_ctx_pct ?? 0));
+          const maxCtx = Math.max(
+            ...groupSessions.map((s) => s.current_ctx_pct ?? 0),
+          );
           return (
             <div key={groupName}>
               <GroupHeader
@@ -182,12 +187,14 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
         })}
 
       {/* Sorted by turns */}
-      {view === "turns" &&
-        renderFlat(byTurns, (_, i) => `#${i + 1}`)}
+      {view === "turns" && renderFlat(byTurns, (_, i) => `#${i + 1}`)}
 
       {/* Ranked by ctx% */}
       {view === "ctx_pct" &&
-        renderFlat(byCtx, (s) => `${((s.current_ctx_pct ?? 0) * 100).toFixed(0)}%`)}
+        renderFlat(
+          byCtx,
+          (s) => `${((s.current_ctx_pct ?? 0) * 100).toFixed(0)}%`,
+        )}
     </div>
   );
 }

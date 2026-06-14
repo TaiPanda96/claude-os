@@ -219,9 +219,10 @@ async function poll() {
 
     // Phase 3 — proactive: fire when slope turns negative, before GC thresholds fire
     if (trend === "declining" && lastTrend !== "declining") {
-      const turnsMsg = health?.turnsToInflection != null
-        ? ` Quality may drop below threshold in ~${health.turnsToInflection} turns.`
-        : "";
+      const turnsMsg =
+        health?.turnsToInflection != null
+          ? ` Quality may drop below threshold in ~${health.turnsToInflection} turns.`
+          : "";
       new Notification({
         title: "Claude OS — Quality Declining",
         body: `Session "${session?.name ?? "unnamed"}" quality is trending down at ${Math.min(ctxPct * 100, 100).toFixed(0)}% context.${turnsMsg}`,
@@ -230,7 +231,11 @@ async function poll() {
     }
 
     // Reactive fallback: hard GC transition (threshold-based, kept as safety net)
-    if (gcState === "hard_gc" && lastGCState !== "hard_gc" && lastTrend !== "declining") {
+    if (
+      gcState === "hard_gc" &&
+      lastGCState !== "hard_gc" &&
+      lastTrend !== "declining"
+    ) {
       new Notification({
         title: "Claude OS — Hard GC",
         body: `Session "${session?.name ?? "unnamed"}" is at ${Math.min(ctxPct * 100, 100).toFixed(0)}% context. Consider compacting.`,

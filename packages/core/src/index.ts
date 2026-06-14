@@ -19,27 +19,51 @@ export type {
   GCState,
   SessionHealth,
 } from "./types.js";
-export {
-  ingestJsonLFile,
-  printIngestStats,
-} from "./ingest/ingest-jsonl-file.js";
+export { ingestJsonLFile } from "./ingest/ingest-jsonl-file.js";
 export type { IngestResult } from "./ingest/ingest-jsonl-file.js";
 export { initializeSchemas } from "./ingest/initialize-schemas.js";
 export {
   findJsonlForSession,
   DEFAULT_PROJECTS_DIR,
-} from "./ingest/project-discovery.js";
+} from "./ingest/find-jsonl-for-session.js";
 export { computeSessionHealthStats } from "./health.js";
 export type { SessionHealthStats } from "./health.js";
 export {
-  resolveProjectId, getProject, getProjectByCwd,
-  getPolicy, upsertPolicy,
-  insertCompactionEvent, updateCompactionEvent,
-  getCompactionEvents, getLastCompactionEvent,
-} from "./db.js";
-export { runCompaction } from "./compaction.js";
+  qualityForTurn,
+  OUTPUT_DENSITY_ANCHOR,
+  SELF_CORRECTION_ANCHOR,
+  QUALITY_FLOOR,
+} from "./domain/quality-proxy.js";
+export type { QualitySignals } from "./domain/quality-proxy.js";
+export {
+  AnthropicLlm,
+  llmPortFactory,
+} from "./infrastructure/anthropic-llm.js";
 export type {
-  Project, CompactionPolicy, CompactionEvent, CompactionFileResult,
-  MemoryFile, UpdateMode, DecayScope, TriggerConfig,
+  ClassifierPort,
+  SummarizerPort,
+  LlmPorts,
+} from "./domain/llm-ports.js";
+export {
+  resolveProjectId,
+  getProject,
+  getProjectByCwd,
+  getPolicy,
+  upsertPolicy,
+  insertCompactionEvent,
+  updateCompactionEvent,
+  getCompactionEvents,
+  getLastCompactionEvent,
+} from "./db.js";
+export { compaction } from "./compaction.js";
+export type {
+  Project,
+  CompactionPolicy,
+  CompactionEvent,
+  CompactionFileResult,
+  MemoryFile,
+  UpdateMode,
+  DecayScope,
+  TriggerConfig,
 } from "./types.js";
 export { TriggerTypeEnum } from "./types.js";

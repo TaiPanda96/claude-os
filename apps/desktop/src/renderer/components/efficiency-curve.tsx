@@ -26,8 +26,10 @@ const METRIC_CONFIG: Record<Metric, MetricMeta> = {
   quality: {
     label: "Output Quality",
     signal: "Is Claude degrading as context fills?",
-    formula: "0.5 × output density  +  0.3 × (1 − self-corrections)  +  0.2 × (1 − repetition)",
-    watchFor: "Sustained drops past 60% ctx — earlier the drop, the more context is hurting output",
+    formula:
+      "0.5 × output density  +  0.3 × (1 − self-corrections)  +  0.2 × (1 − repetition)",
+    watchFor:
+      "Sustained drops past 60% ctx — earlier the drop, the more context is hurting output",
     yLabel: "quality score  [0–1]",
     color: tokens.text,
   },
@@ -35,33 +37,51 @@ const METRIC_CONFIG: Record<Metric, MetricMeta> = {
     label: "Context Bloat Rate",
     signal: "How fast is context inflating vs. useful output?",
     formula: "new ctx tokens introduced this turn  ÷  output tokens produced",
-    watchFor: "Rising ratio → context growing faster than work — approaching diminishing returns",
+    watchFor:
+      "Rising ratio → context growing faster than work — approaching diminishing returns",
     yLabel: "ctx tokens per output token",
     color: "#bf5af2",
   },
   workEfficiency: {
     label: "Token Cost / Artifact",
     signal: "Are meaningful turns getting more expensive to produce?",
-    formula: "cumulative tokens consumed  ÷  high-output turns produced (running total)",
-    watchFor: "Steadily rising curve = GC pressure — each useful turn costs more tokens than the last",
+    formula:
+      "cumulative tokens consumed  ÷  high-output turns produced (running total)",
+    watchFor:
+      "Steadily rising curve = GC pressure — each useful turn costs more tokens than the last",
     yLabel: "tokens per artifact",
     color: "#0a84ff",
   },
 };
 
 function CustomDot(props: any) {
-  const { cx, cy, payload, metric }: { cx: number; cy: number; payload: ChartPoint; metric: Metric } = props;
+  const {
+    cx,
+    cy,
+    payload,
+    metric,
+  }: { cx: number; cy: number; payload: ChartPoint; metric: Metric } = props;
   const color =
     metric === "quality"
       ? (GC_COLOR[payload.gcState as keyof typeof GC_COLOR] ?? GC_COLOR.clean)
       : METRIC_CONFIG[metric].color;
-  return <circle cx={cx} cy={cy} r={3} fill={color} fillOpacity={0.8} stroke="none" />;
+  return (
+    <circle
+      cx={cx}
+      cy={cy}
+      r={3}
+      fill={color}
+      fillOpacity={0.8}
+      stroke="none"
+    />
+  );
 }
 
 function CustomTooltip({ active, payload, metric }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload as ChartPoint;
-  const stateTextColor = GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
+  const stateTextColor =
+    GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
   return (
     <div style={tooltipStyle}>
       <div style={{ color: stateTextColor, fontWeight: 600, marginBottom: 6 }}>
@@ -72,17 +92,32 @@ function CustomTooltip({ active, payload, metric }: any) {
         <span style={tooltipValue}>{d.quality.toFixed(2)}</span>
       </div>
       <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.marginalDensity.color }}>context bloat rate</span>
+        <span
+          style={{
+            ...tooltipLabel,
+            color: METRIC_CONFIG.marginalDensity.color,
+          }}
+        >
+          context bloat rate
+        </span>
         <span style={tooltipValue}>
           {d.marginalDensityRaw.toFixed(1)}x
-          <span style={{ color: tokens.muted, marginLeft: 4 }}>({d.marginalDensity.toFixed(2)})</span>
+          <span style={{ color: tokens.muted, marginLeft: 4 }}>
+            ({d.marginalDensity.toFixed(2)})
+          </span>
         </span>
       </div>
       <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>token cost / artifact</span>
+        <span
+          style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}
+        >
+          token cost / artifact
+        </span>
         <span style={tooltipValue}>
           {d.workEfficiencyRaw.toLocaleString()} tok
-          <span style={{ color: tokens.muted, marginLeft: 4 }}>({d.workEfficiency.toFixed(2)})</span>
+          <span style={{ color: tokens.muted, marginLeft: 4 }}>
+            ({d.workEfficiency.toFixed(2)})
+          </span>
         </span>
       </div>
     </div>
@@ -98,7 +133,12 @@ const tooltipStyle: React.CSSProperties = {
   fontFamily: tokens.fontMono,
   minWidth: 240,
 };
-const tooltipRow: React.CSSProperties = { display: "flex", justifyContent: "space-between", gap: 16, marginTop: 3 };
+const tooltipRow: React.CSSProperties = {
+  display: "flex",
+  justifyContent: "space-between",
+  gap: 16,
+  marginTop: 3,
+};
 const tooltipLabel: React.CSSProperties = { color: tokens.muted };
 const tooltipValue: React.CSSProperties = { color: tokens.highlight };
 
@@ -180,13 +220,20 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
         {(["clean", "soft_gc", "hard_gc"] as const).map((s) => (
           <span key={s} style={styles.legendItem}>
             <span style={{ ...styles.legendDot, background: GC_COLOR[s] }} />
-            {s === "clean" ? "Clean <60%" : s === "soft_gc" ? "Soft GC 60–80%" : "Hard GC >80%"}
+            {s === "clean"
+              ? "Clean <60%"
+              : s === "soft_gc"
+                ? "Soft GC 60–80%"
+                : "Hard GC >80%"}
           </span>
         ))}
       </div>
 
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart data={data} margin={{ top: 24, right: 48, bottom: 32, left: 0 }}>
+        <LineChart
+          data={data}
+          margin={{ top: 24, right: 48, bottom: 32, left: 0 }}
+        >
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.surface2} />
           <XAxis
             dataKey="ctxPct"
@@ -195,22 +242,55 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
             tickFormatter={(v) => `${v}%`}
             stroke={tokens.border}
             tick={{ fill: tokens.muted, fontSize: tokens.fsLabel }}
-            label={{ value: "context utilisation", position: "insideBottom", offset: -12, fill: tokens.border, fontSize: tokens.fsLabel }}
+            label={{
+              value: "context utilisation",
+              position: "insideBottom",
+              offset: -12,
+              fill: tokens.border,
+              fontSize: tokens.fsLabel,
+            }}
           />
           <YAxis
             domain={[0, 1]}
             tickFormatter={(v) => v.toFixed(1)}
             stroke={tokens.border}
             tick={{ fill: tokens.muted, fontSize: tokens.fsLabel }}
-            label={{ value: cfg.yLabel, angle: -90, position: "insideLeft", offset: 12, fill: tokens.border, fontSize: tokens.fsLabel }}
+            label={{
+              value: cfg.yLabel,
+              angle: -90,
+              position: "insideLeft",
+              offset: 12,
+              fill: tokens.border,
+              fontSize: tokens.fsLabel,
+            }}
           />
           <Tooltip content={<CustomTooltip metric={metric} />} />
 
           {/* Zone threshold markers */}
-          <ReferenceLine x={60} stroke={GC_TEXT.soft_gc} strokeDasharray="4 3" strokeOpacity={0.6}
-            label={{ value: "Soft GC", position: "top", fill: GC_TEXT.soft_gc, fontSize: 10 }} />
-          <ReferenceLine x={80} stroke={GC_TEXT.hard_gc} strokeDasharray="4 3" strokeOpacity={0.6}
-            label={{ value: "Hard GC", position: "top", fill: GC_TEXT.hard_gc, fontSize: 10 }} />
+          <ReferenceLine
+            x={60}
+            stroke={GC_TEXT.soft_gc}
+            strokeDasharray="4 3"
+            strokeOpacity={0.6}
+            label={{
+              value: "Soft GC",
+              position: "top",
+              fill: GC_TEXT.soft_gc,
+              fontSize: 10,
+            }}
+          />
+          <ReferenceLine
+            x={80}
+            stroke={GC_TEXT.hard_gc}
+            strokeDasharray="4 3"
+            strokeOpacity={0.6}
+            label={{
+              value: "Hard GC",
+              position: "top",
+              fill: GC_TEXT.hard_gc,
+              fontSize: 10,
+            }}
+          />
 
           {/* GC event annotations — actual session crossings */}
           {(() => {
@@ -221,8 +301,23 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
               const isFirst = !seen.has(ev.gc_type);
               if (isFirst) seen.add(ev.gc_type);
               return (
-                <ReferenceLine key={ev.id} x={x} stroke={color} strokeWidth={1} strokeOpacity={0.35}
-                  {...(isFirst ? { label: { value: "↓", position: "top" as const, fill: color, fontSize: 10 } } : {})} />
+                <ReferenceLine
+                  key={ev.id}
+                  x={x}
+                  stroke={color}
+                  strokeWidth={1}
+                  strokeOpacity={0.35}
+                  {...(isFirst
+                    ? {
+                        label: {
+                          value: "↓",
+                          position: "top" as const,
+                          fill: color,
+                          fontSize: 10,
+                        },
+                      }
+                    : {})}
+                />
               );
             });
           })()}

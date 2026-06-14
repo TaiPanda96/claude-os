@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Turn, GCEvent, GC_TEXT } from "../types.js";
-import { computeQuality, deriveStats } from "../quality.js";
+import { computeQuality, sessionSummaryStats } from "../quality.js";
 import { tokens } from "../theme.js";
 
 const styles: Record<string, React.CSSProperties> = {
@@ -48,7 +48,7 @@ export function SessionSummary({ turns, gcEvents }: Props) {
   const stats = useMemo(() => {
     const points = computeQuality(turns);
     const firstEvent = gcEvents[0] ?? null;
-    return deriveStats(
+    return sessionSummaryStats(
       points,
       firstEvent
         ? Math.min(Math.round(firstEvent.ctx_pct_at_trigger * 1000) / 10, 100)
@@ -149,7 +149,9 @@ export function SessionSummary({ turns, gcEvents }: Props) {
       {items.map((item) => (
         <div key={item.label} style={styles.stat}>
           <div style={styles.label}>{item.label}</div>
-          <div style={{ ...styles.value, color: item.color ?? tokens.highlight }}>
+          <div
+            style={{ ...styles.value, color: item.color ?? tokens.highlight }}
+          >
             {item.value}
           </div>
           {item.sub && <div style={styles.sub}>{item.sub}</div>}

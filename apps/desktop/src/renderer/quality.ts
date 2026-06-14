@@ -1,4 +1,8 @@
 import { Turn } from "./types.js";
+import {
+  qualityForTurn,
+  QUALITY_FLOOR,
+} from "@claude-os/core/domain/quality-proxy.js";
 
 export type Metric = "quality" | "marginalDensity" | "workEfficiency";
 
@@ -17,32 +21,28 @@ export interface ChartPoint {
   workEfficiency: number; // 0–1 normalized (higher = worse efficiency)
 }
 
-function normalize(values: number[]): number[] {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min;
-  return range === 0
-    ? values.map(() => 0.5)
-    : values.map((v) => (v - min) / range);
+export interface SessionStats {
+  peakQuality: number;
+  peakCtxPct: number;
+  inflectionCtxPct: number | null;
+  recentTrend: "rising" | "flat" | "declining";
+  qualityDelta: number;
+  firstGCCtxPct: number | null;
+  firstGCType: string | null;
+  avgMarginalDensity: number; // avg new-ctx-tokens per output token
+  currentWorkEfficiency: number; // tokens-per-artifact at end of session
+  // Phase 3 — proactive degradation signal
+  currentQuality: number; // quality at the most recent turn
+  turnsToInflection: number | null; // projected turns until quality crosses QUALITY_FLOOR
 }
 
-// Fixed upper bound for output_density derived from empirical data (observed max ~0.34).
-// Using a fixed anchor instead of per-session min-max keeps quality scores comparable
-// across sessions — otherwise a weak session that peaks at 0.15 density gets stretched
-// to 1.0, making it look identical to a strong session that peaks at 0.34.
-const OUTPUT_DENSITY_ANCHOR = 0.4;
-
-// self_correction_count is a raw occurrence count (16 marker phrases, see countSelfCorrections).
-// Dividing by a soft ceiling preserves magnitude — 3 corrections penalises more than 1.
-// Ceiling of 5 is conservative given 16 markers; clamp handles any outlier above it.
-const SELF_CORRECTION_ANCHOR = 5;
-
+/**
+ * Compute quality and related metrics for each turn in a session, based on the turn metadata.
+ * @param turns - An array of Turn objects representing the turns in a session, with metadata such as token counts and context percentages.
+ * @returns An array of ChartPoint objects containing the computed quality and related metrics for each turn.
+ */
 export function computeQuality(turns: Turn[]): ChartPoint[] {
   if (turns.length === 0) return [];
-
-  // Exclude turns where ctx_pct > 1.0 — these come from sessions whose model was not
-  // in MODEL_CONTEXT_WINDOWS and fell back to the 200k default, producing impossible
-  // percentages that corrupt every downstream metric.
   const validTurns = turns.filter((t) => t.ctxPct <= 1.0);
   if (validTurns.length === 0) return [];
 
@@ -87,18 +87,7 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
     ctxPct: Math.round(t.ctxPct * 1000) / 10,
     gcState:
       t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
-    quality:
-      Math.round(
-        (Math.min(1, (t.outputDensity ?? 0) / OUTPUT_DENSITY_ANCHOR) * 0.5 +
-          (1 -
-            Math.min(
-              1,
-              (t.selfCorrectionCount ?? 0) / SELF_CORRECTION_ANCHOR,
-            )) *
-            0.3 +
-          (1 - (t.repetitionScore ?? 0)) * 0.2) *
-          100,
-      ) / 100,
+    quality: qualityForTurn(t),
     outputDensity: t.outputDensity ?? 0,
     marginalDensityRaw: marginalRaw[i]!,
     marginalDensity: Math.round(marginalN[i]! * 100) / 100,
@@ -107,26 +96,7 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
   }));
 }
 
-export interface SessionStats {
-  peakQuality: number;
-  peakCtxPct: number;
-  inflectionCtxPct: number | null;
-  recentTrend: "rising" | "flat" | "declining";
-  qualityDelta: number;
-  firstGCCtxPct: number | null;
-  firstGCType: string | null;
-  avgMarginalDensity: number; // avg new-ctx-tokens per output token
-  currentWorkEfficiency: number; // tokens-per-artifact at end of session
-  // Phase 3 — proactive degradation signal
-  currentQuality: number;       // quality at the most recent turn
-  turnsToInflection: number | null; // projected turns until quality crosses QUALITY_FLOOR
-}
-
-// Quality floor used for turnsToInflection projection.
-// Chosen at 0.3: below this the session is producing low-value output.
-const QUALITY_FLOOR = 0.3;
-
-export function deriveStats(
+export function sessionSummaryStats(
   points: ChartPoint[],
   firstGCCtxPct: number | null,
   firstGCType: string | null,
@@ -219,4 +189,13 @@ export function deriveStats(
     currentQuality,
     turnsToInflection,
   };
+}
+
+function normalize(values: number[]): number[] {
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min;
+  return range === 0
+    ? values.map(() => 0.5)
+    : values.map((v) => (v - min) / range);
 }

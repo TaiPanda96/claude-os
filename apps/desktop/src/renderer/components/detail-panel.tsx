@@ -1,8 +1,8 @@
 import React, { useState, useRef, useCallback } from "react";
 import { SessionRow, GCEvent, GC_TEXT, gcState } from "../types.js";
 import { SessionDetail } from "../types.js";
-import { EfficiencyCurve } from "./EfficiencyCurve.js";
-import { SessionSummary } from "./SessionSummary.js";
+import { EfficiencyCurve } from "./efficiency-curve.js";
+import { SessionSummary } from "./session-summary.js";
 import { tokens } from "../theme.js";
 
 interface Props {

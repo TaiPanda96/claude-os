@@ -1,104 +1,47 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { v4 as uuidv4 } from "uuid";
-import Anthropic from "@anthropic-ai/sdk";
 import type { Database } from "./types.js";
-import type { CompactionPolicy, CompactionEvent, CompactionFileResult, MemoryFile } from "./types.js";
+import type {
+  CompactionPolicy,
+  CompactionEvent,
+  CompactionFileResult,
+} from "./types.js";
 import { TriggerTypeEnum, type Turn } from "./types.js";
-import { insertCompactionEvent, updateCompactionEvent, getLastCompactionEvent, getSessionTurns } from "./db.js";
+import {
+  insertCompactionEvent,
+  updateCompactionEvent,
+  getLastCompactionEvent,
+  getSessionTurns,
+} from "./db.js";
+import type { SummarizerPort } from "./domain/llm-ports.js";
+import { llmPortFactory } from "./infrastructure/anthropic-llm.js";
+import { memoryDir } from "./utils/memory-dir.js";
+import { ensureDir } from "./utils/ensure-dir-exists.js";
+import { readDir } from "./utils/read-dir.js";
+import { writeMemoryFileToDir } from "./utils/write-memory-file-to-dir.js";
+import { buildMemoryCompactionPrompt } from "./infrastructure/ai/build-memory-compaction-prompt.js";
 
-const COMPACTION_MODEL = "claude-haiku-4-5-20251001";
-const MERGE_MODEL      = "claude-sonnet-4-6";
 const MAX_TOKENS_DEFAULT = 8000;
 const MERGE_EXISTING_CAP = 4000;
+// Output cap for each memory-file generation, independent of the input slice budget.
+const OUTPUT_MAX_TOKENS = 2048;
+const TOKEN_SLICE_BUDGET_MULTIPLIER = 4; // Rough chars per token estimate
 
-// Memory files live at ~/.claude/projects/{urlencoded-cwd}/claude-os/memory/
-function memoryDir(cwd: string): string {
-  const encoded = encodeURIComponent(cwd).replace(/%2F/g, "-");
-  return join(homedir(), ".claude", "projects", encoded, "claude-os", "memory");
-}
-
-function ensureDir(dir: string): void {
-  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-}
-
-function readExisting(filePath: string, capChars: number): string {
-  if (!existsSync(filePath)) return "";
-  const content = readFileSync(filePath, "utf-8");
-  // Rough token estimate: 4 chars per token
-  return content.slice(0, capChars * 4);
-}
-
-function assembleSlice(turns: Turn[], fromTurnIndex: number, maxTokens: number): { text: string; start: number; end: number } {
-  const slice = turns.filter((t) => t.turnIndex >= fromTurnIndex);
-  if (slice.length === 0) return { text: "", start: fromTurnIndex, end: fromTurnIndex };
-
-  // Budget: 4 chars per token estimate, newest turns first to preserve recency
-  const budget = maxTokens * 4;
-  const parts: string[] = [];
-  let used = 0;
-  for (const t of [...slice].reverse()) {
-    const line = `[Turn ${t.turnIndex}] output_tokens=${t.outputTokens} ctx=${(t.ctxPct * 100).toFixed(1)}%`;
-    if (used + line.length > budget) break;
-    parts.unshift(line);
-    used += line.length;
-  }
-
-  return {
-    text: parts.join("\n"),
-    start: slice[0]!.turnIndex,
-    end: slice[slice.length - 1]!.turnIndex,
-  };
-}
-
-function buildPrompt(file: MemoryFile, slice: { text: string; start: number; end: number }, existingContent: string): string {
-  const modeBlock =
-    file.update_mode === "merge"
-      ? `EXISTING FILE CONTENT:\n${existingContent}\n\nYour task: synthesize the existing content with the new session slice below into a single updated file. Preserve all prior content that remains valid. Update or retire content that the new slice contradicts or resolves.`
-      : file.update_mode === "append"
-      ? "Your task: extract content from the session slice below that belongs in this file. Write only new content — do not repeat anything already in the file. Begin your output directly. It will be appended below a separator."
-      : "Your task: write a fresh version of this file from the session slice below. Ignore any prior version — produce a complete, current snapshot.";
-
-  return `You are compacting a slice of a Claude session into a structured memory file.
-
-MEMORY FILE: ${file.filename}
-PURPOSE: ${file.description}
-UPDATE MODE: ${file.update_mode}
-
-${modeBlock}
-
-SESSION SLICE (turns ${slice.start} to ${slice.end}):
-${slice.text}
-
-Output the file content directly. No preamble. No explanation.`;
-}
-
-async function writeMemoryFile(
-  dir: string,
-  file: MemoryFile,
-  content: string,
-): Promise<CompactionFileResult> {
-  ensureDir(dir);
-  const filePath = join(dir, file.filename);
-  const bytes = Buffer.byteLength(content, "utf-8");
-
-  if (file.update_mode === "append") {
-    const separator = `\n---\n<!-- compacted ${new Date().toISOString()} -->\n`;
-    appendFileSync(filePath, separator + content, "utf-8");
-  } else {
-    writeFileSync(filePath, content, "utf-8");
-  }
-
-  return {
-    filename: file.filename,
-    update_mode: file.update_mode,
-    bytes_written: bytes,
-    preview: content.slice(0, 200),
-  };
-}
-
-export async function runCompaction(
+/**
+ * Base Compaction Workflow:
+ * 1. Create a CompactionEvent with status "running" and record the trigger details.
+ * 2. For each MemoryFile in the policy:
+ *    a. Assemble a slice of recent turns since the last compaction, up to the max token limit.
+ *    b. Build a prompt for the summarizer based on the update mode (merge/append/fresh).
+ *    c. Call the summarizer port to generate the new file content.
+ *    d. Write the content to disk according to the update mode, and record the result.
+ * 3. If all files are processed successfully, update the CompactionEvent status to "completed" and save file results.
+ * 4. If any error occurs, catch it, update the CompactionEvent status to "failed", and record the error message.
+ *
+ * This workflow ensures that we have a complete audit trail of compaction events, including what triggered them, what files were written, and any errors that occurred.
+ * The use of the summarizer port abstracts away the LLM details, allowing for flexibility in how the summarization is performed.
+ */
+export async function compaction(
   db: Database,
   sessionId: string,
   policy: CompactionPolicy,
@@ -106,10 +49,10 @@ export async function runCompaction(
   triggerDetail: string,
   tokensAtTrigger: number,
   cwd: string,
+  summarizer: SummarizerPort = llmPortFactory().summarizer,
 ): Promise<CompactionEvent> {
-  const client = new Anthropic();
-  const now = new Date().toISOString();
   const eventId = uuidv4();
+  const now = new Date().toISOString();
 
   const event: CompactionEvent = {
     id: eventId,
@@ -124,53 +67,94 @@ export async function runCompaction(
     completed_at: null,
     error: null,
   };
+
   insertCompactionEvent(db, event);
 
   try {
     const turns = getSessionTurns(db, sessionId);
     const lastEvent = getLastCompactionEvent(db, sessionId);
     const fromTurnIndex = lastEvent
-      ? turns.findIndex((t) => t.createdAt > new Date(lastEvent.completed_at!).getTime())
+      ? turns.findIndex(
+          (t) => t.createdAt > new Date(lastEvent.completed_at!).getTime(),
+        )
       : 0;
 
     const dir = memoryDir(cwd);
+    ensureDir(dir);
     const filesWritten: CompactionFileResult[] = [];
 
     for (const file of policy.memory_schema) {
       const maxTokens = file.max_tokens ?? MAX_TOKENS_DEFAULT;
-      const slice = assembleSlice(turns, Math.max(0, fromTurnIndex), maxTokens);
+      const slice = assembleSliceToCompact(
+        turns,
+        Math.max(0, fromTurnIndex),
+        maxTokens,
+      );
       if (!slice.text) continue;
-
       const filePath = join(dir, file.filename);
-      const existingContent = file.update_mode === "merge"
-        ? readExisting(filePath, MERGE_EXISTING_CAP)
-        : "";
+      const existingContent =
+        file.update_mode === "merge"
+          ? readDir(filePath, MERGE_EXISTING_CAP)
+          : "";
 
-      const prompt = buildPrompt(file, slice, existingContent);
-      const model = file.update_mode === "merge" ? MERGE_MODEL : COMPACTION_MODEL;
+      const prompt = buildMemoryCompactionPrompt(file, slice, existingContent);
 
-      const response = await client.messages.create({
-        model,
-        max_tokens: 2048,
-        messages: [{ role: "user", content: prompt }],
+      const outputText = await summarizer.summarize(prompt, {
+        merge: file.update_mode === "merge",
+        maxTokens: OUTPUT_MAX_TOKENS,
       });
 
-      const outputText = response.content
-        .filter((b) => b.type === "text")
-        .map((b) => (b as { text: string }).text)
-        .join("\n");
-
-      const result = await writeMemoryFile(dir, file, outputText);
+      const result = await writeMemoryFileToDir(dir, file, outputText);
       filesWritten.push(result);
     }
 
     const completed_at = new Date().toISOString();
-    updateCompactionEvent(db, eventId, { status: "completed", files_written: filesWritten, completed_at });
-    return { ...event, status: "completed", files_written: filesWritten, completed_at };
+    updateCompactionEvent(db, eventId, {
+      status: "completed",
+      files_written: filesWritten,
+      completed_at,
+    });
+    return {
+      ...event,
+      status: "completed",
+      files_written: filesWritten,
+      completed_at,
+    };
   } catch (err) {
     const completed_at = new Date().toISOString();
     const error = err instanceof Error ? err.message : String(err);
-    updateCompactionEvent(db, eventId, { status: "failed", completed_at, error });
+    updateCompactionEvent(db, eventId, {
+      status: "failed",
+      completed_at,
+      error,
+    });
     return { ...event, status: "failed", completed_at, error };
   }
+}
+
+function assembleSliceToCompact(
+  turns: Turn[],
+  fromTurnIndex: number,
+  maxTokens: number,
+): { text: string; start: number; end: number } {
+  const slice = turns.filter((t) => t.turnIndex >= fromTurnIndex);
+  if (slice.length === 0)
+    return { text: "", start: fromTurnIndex, end: fromTurnIndex };
+
+  const parts: string[] = [];
+  // Budget: 4 chars per token estimate, newest turns first to preserve recency
+  const budget = maxTokens * TOKEN_SLICE_BUDGET_MULTIPLIER;
+  let used = 0;
+  for (const t of [...slice].reverse()) {
+    const line = `[Turn ${t.turnIndex}] output_tokens=${t.outputTokens} ctx=${(t.ctxPct * 100).toFixed(1)}%`;
+    if (used + line.length > budget) break;
+    parts.unshift(line);
+    used += line.length;
+  }
+
+  return {
+    text: parts.join("\n"),
+    start: slice[0]!.turnIndex,
+    end: slice[slice.length - 1]!.turnIndex,
+  };
 }

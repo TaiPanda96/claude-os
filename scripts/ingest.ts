@@ -15,11 +15,9 @@ import { Database } from "bun:sqlite";
 import { readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import {
-  ingestJsonLFile,
-  printIngestStats,
-} from "@claude-os/core/ingest/ingest-jsonl-file.js";
+import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file.js";
 import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
+import { printIngestStats } from "@claude-os/core/ingest/print-ingest-stats.js";
 
 const PROJECTS = join(homedir(), ".claude", "projects");
 

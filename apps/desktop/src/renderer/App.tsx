@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { SessionTable } from "./components/SessionTable.js";
-import { DetailPanel } from "./components/DetailPanel.js";
+import { SessionTable } from "./components/session-table.js";
+import { DetailPanel } from "./components/detail-panel.js";
 import { SessionRow, SessionDetail, GCEvent, SERVER } from "./types.js";
 import { tokens } from "./theme.js";
 
@@ -81,16 +81,60 @@ export function App() {
     <div style={styles.root}>
       {/* Title bar */}
       <div style={styles.titleBar}>
-        <svg width="16" height="16" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg" style={{ flexShrink: 0, marginRight: 6 }} aria-hidden="true">
-          <rect width="40" height="40" rx="6" fill="#0D1117"/>
-          <path d="M12 8 L9 8 L9 32 L12 32" stroke="#00C9A7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          <path d="M28 8 L31 8 L31 32 L28 32" stroke="#00C9A7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-          <circle cx="20" cy="14" r="2.5" fill="#00C9A7"/>
-          <circle cx="15" cy="22" r="1.8" fill="#00C9A7" opacity="0.65"/>
-          <circle cx="25" cy="22" r="1.8" fill="#00C9A7" opacity="0.65"/>
-          <line x1="20" y1="14" x2="15" y2="22" stroke="#00C9A7" strokeWidth="0.8" opacity="0.5"/>
-          <line x1="20" y1="14" x2="25" y2="22" stroke="#00C9A7" strokeWidth="0.8" opacity="0.5"/>
-          <line x1="15" y1="22" x2="25" y2="22" stroke="#00C9A7" strokeWidth="0.6" opacity="0.3"/>
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 40 40"
+          fill="none"
+          xmlns="http://www.w3.org/2000/svg"
+          style={{ flexShrink: 0, marginRight: 6 }}
+          aria-hidden="true"
+        >
+          <rect width="40" height="40" rx="6" fill="#0D1117" />
+          <path
+            d="M12 8 L9 8 L9 32 L12 32"
+            stroke="#00C9A7"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M28 8 L31 8 L31 32 L28 32"
+            stroke="#00C9A7"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <circle cx="20" cy="14" r="2.5" fill="#00C9A7" />
+          <circle cx="15" cy="22" r="1.8" fill="#00C9A7" opacity="0.65" />
+          <circle cx="25" cy="22" r="1.8" fill="#00C9A7" opacity="0.65" />
+          <line
+            x1="20"
+            y1="14"
+            x2="15"
+            y2="22"
+            stroke="#00C9A7"
+            strokeWidth="0.8"
+            opacity="0.5"
+          />
+          <line
+            x1="20"
+            y1="14"
+            x2="25"
+            y2="22"
+            stroke="#00C9A7"
+            strokeWidth="0.8"
+            opacity="0.5"
+          />
+          <line
+            x1="15"
+            y1="22"
+            x2="25"
+            y2="22"
+            stroke="#00C9A7"
+            strokeWidth="0.6"
+            opacity="0.3"
+          />
         </svg>
         <span style={styles.titleText}>Claude OS</span>
         <span style={styles.titleMeta}>
@@ -166,7 +210,11 @@ const styles: Record<string, React.CSSProperties> = {
     gap: tokens.sp3,
   },
   errorIcon: { fontSize: 32, color: "#EF4444" },
-  errorText: { color: tokens.muted, fontSize: tokens.fsBody, fontFamily: tokens.fontMono },
+  errorText: {
+    color: tokens.muted,
+    fontSize: tokens.fsBody,
+    fontFamily: tokens.fontMono,
+  },
   retryBtn: {
     marginTop: tokens.sp1,
     padding: "6px 16px",

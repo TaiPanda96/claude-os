@@ -60,7 +60,7 @@ Both the hook and the bulk ingest funnel through `ingestJsonLFile` in `packages/
 
 ### Compaction engine (Phase 3, current work surface)
 
-`trigger-evaluator.ts` is called fire-and-forget after each turn. It resolves the session's project → `CompactionPolicy`, enforces a cooldown, and evaluates `TriggerConfig`s (turn cadence, ctx threshold, semantic classifiers via a Haiku call, or combined). On fire it calls `runCompaction` (`compaction.ts`), which assembles a turn slice and writes per-`MemoryFile` outputs (`overwrite`/`append`/`merge` modes) into `~/.claude/projects/<encoded-cwd>/claude-os/memory/`. Models: classifier + extraction use `claude-haiku-4-5-20251001`, merge uses `claude-sonnet-4-6`. Requires `ANTHROPIC_API_KEY` (in `packages/core/.env`).
+`trigger-evaluator.ts` is called fire-and-forget after each turn. It resolves the session's project → `CompactionPolicy`, enforces a cooldown, and evaluates `TriggerConfig`s (turn cadence, ctx threshold, semantic classifiers via a Haiku call, or combined). On fire it calls `compaction` (`compaction.ts`), which assembles a turn slice and writes per-`MemoryFile` outputs (`overwrite`/`append`/`merge` modes) into `~/.claude/projects/<encoded-cwd>/claude-os/memory/`. Models: classifier + extraction use `claude-haiku-4-5-20251001`, merge uses `claude-sonnet-4-6`. Requires `ANTHROPIC_API_KEY` (in `packages/core/.env`).
 
 ## Conventions
 

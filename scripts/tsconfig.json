@@ -2,6 +2,7 @@
   "extends": "../tsconfig.base.json",
   "compilerOptions": {
     "baseUrl": "..",
+    "ignoreDeprecations": "6.0",
     "paths": {
       "@claude-os/core": ["packages/core/src/index.ts"],
       "@claude-os/core/*": ["packages/core/src/*"]

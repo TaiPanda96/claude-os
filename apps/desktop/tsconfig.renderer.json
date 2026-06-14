@@ -3,7 +3,14 @@
   "compilerOptions": {
     "jsx": "react-jsx",
     "types": ["node"],
-    "noEmit": true
+    "noEmit": true,
+    // Resolve @claude-os/core to source, matching the root tsconfig.json convention.
+    // (Vite resolves the same import at runtime via core's package.json "exports".)
+    "baseUrl": ".",
+    "paths": {
+      "@claude-os/core": ["../../packages/core/src/index.ts"],
+      "@claude-os/core/*": ["../../packages/core/src/*"]
+    }
   },
   "include": ["src/renderer"]
 }
