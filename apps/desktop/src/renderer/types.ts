@@ -7,6 +7,58 @@ export interface SessionRow {
   current_ctx_pct: number | null;
   turn_count: number;
   last_active_at: number;
+  // Project topology — present when server JOINs projects table
+  project_id: string | null;
+  project_name: string | null;
+}
+
+export interface Project {
+  id: string;
+  cwd: string;
+  name: string;
+  created_at: number;
+  session_count: number;
+  last_active_at: number | null;
+  has_policy: 0 | 1;
+}
+
+// ── Policy types (mirrors packages/core/src/types.ts) ──────────────────────
+
+export type UpdateMode = "overwrite" | "append" | "merge";
+export type DecayScope = "session" | "project" | "permanent";
+
+export interface MemoryFile {
+  filename: string;
+  description: string;
+  update_mode: UpdateMode;
+  decay: DecayScope;
+  max_tokens?: number;
+}
+
+export type TriggerType =
+  | "turn_cadence"
+  | "ctx_threshold"
+  | "architectural_decision"
+  | "outcome_resolved"
+  | "semantic_event";
+
+export type TriggerConfig =
+  | { triggerType: "turn_cadence"; every: number }
+  | { triggerType: "ctx_threshold"; pct: number }
+  | { triggerType: "architectural_decision"; min_ctx_pct: number; min_turns: number }
+  | { triggerType: "outcome_resolved"; min_ctx_pct: number; min_turns: number }
+  | { triggerType: "semantic_event"; classifier: string; min_ctx_pct: number; min_turns: number };
+
+export interface CompactionPolicy {
+  id: string;
+  project_id: string;
+  name: string;
+  active: boolean;
+  triggers: TriggerConfig[];
+  memory_schema: MemoryFile[];
+  cooldown_turns: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Turn {
