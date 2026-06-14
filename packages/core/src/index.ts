@@ -21,6 +21,8 @@ export type {
 } from "./types.js";
 export { ingestJsonLFile } from "./ingest/ingest-jsonl-file.js";
 export type { IngestResult } from "./ingest/ingest-jsonl-file.js";
+export { computeTurnMetrics, recordTurn } from "./ingest/record-turn.js";
+export type { RawTurnInput, RecordTurnResult } from "./ingest/record-turn.js";
 export { initializeSchemas } from "./ingest/initialize-schemas.js";
 export {
   findJsonlForSession,
@@ -46,6 +48,7 @@ export type {
 } from "./domain/llm-ports.js";
 export {
   resolveProjectId,
+  upsertSession,
   getProject,
   getProjectByCwd,
   getPolicy,

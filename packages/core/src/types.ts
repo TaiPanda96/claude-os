@@ -33,7 +33,12 @@ export interface Turn {
   // Quality proxy signals
   selfCorrectionCount: number; // occurrences of hedging/correction phrases
   repetitionScore: number; // 0–1, bigram overlap with previous turn output
-  outputDensity: number; // output_tokens / input_tokens
+  outputDensity: number; // output_tokens / effectiveInputTokens
+  // Cache / extended fields (present when ingested from JSONL or live wrapper)
+  cacheReadTokens?: number;
+  cacheCreationTokens?: number;
+  effectiveInputTokens?: number;
+  cwd?: string;
 }
 
 // Phrases that indicate the model is revising or hedging mid-response
@@ -176,10 +181,7 @@ export type TriggerConfig =
     }
   | {
       triggerType: TriggerTypeEnum.COMBINED;
-      triggers: Exclude<
-        TriggerConfig,
-        { triggerType: TriggerTypeEnum.COMBINED }
-      >[];
+      triggers: Exclude<TriggerConfig, { triggerType: TriggerTypeEnum.COMBINED }>[];
       mode: "any" | "all";
     };
 

@@ -27,10 +27,7 @@ program
     "Ingest claude project sessions - iterating over per-session JSONL to capture instrumentation",
   )
   .option("--limit <n>", "Cap on clinics considered this run")
-  .option(
-    "--no-dry-run",
-    "Actually enqueue child scrape jobs (default: dry-run)",
-  )
+  .option("--no-dry-run", "Actually enqueue child scrape jobs (default: dry-run)")
   .option("--out <path>", "Write the JSON summary to this path")
   .option("--stats", "Print DB summary only")
   .action(async (opts: { stats?: boolean }) => {
@@ -94,8 +91,7 @@ program
         }
 
         if (jsonlFiles.length === 0) continue;
-        if (!values.verbose)
-          process.stdout.write(`${projectDir.slice(0, 50).padEnd(52)}`);
+        if (!values.verbose) process.stdout.write(`${projectDir.slice(0, 50).padEnd(52)}`);
 
         for (const file of jsonlFiles) {
           const r = ingestJsonLFile(db, join(dir, file), { verbose: true });
