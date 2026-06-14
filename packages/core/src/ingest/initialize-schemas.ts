@@ -90,7 +90,8 @@ export function initializeSchemas(db: Database) {
     ON compaction_events(session_id, started_at DESC)
   `);
 
-  // Backfill project_id for existing sessions that have a cwd
+  // Backfill project_id for existing sessions. cwd lives on turns, not sessions,
+  // so derive distinct project cwds from the turns table.
   db.run(`
     INSERT OR IGNORE INTO projects (id, cwd, name, created_at)
     SELECT
@@ -101,12 +102,19 @@ export function initializeSchemas(db: Database) {
       cwd,
       substr(cwd, instr(cwd, rtrim(cwd, replace(cwd, '/', ''))) + 1),
       strftime('%s','now') * 1000
-    FROM (SELECT DISTINCT cwd FROM sessions WHERE cwd IS NOT NULL AND cwd != '')
+    FROM (SELECT DISTINCT cwd FROM turns WHERE cwd IS NOT NULL AND cwd != '')
   `);
 
   db.run(`
     UPDATE sessions
-    SET project_id = (SELECT id FROM projects WHERE projects.cwd = sessions.cwd)
-    WHERE project_id IS NULL AND cwd IS NOT NULL AND cwd != ''
+    SET project_id = (
+      SELECT p.id FROM projects p
+      WHERE p.cwd = (
+        SELECT t.cwd FROM turns t
+        WHERE t.session_id = sessions.id AND t.cwd IS NOT NULL AND t.cwd != ''
+        LIMIT 1
+      )
+    )
+    WHERE project_id IS NULL
   `);
 }
