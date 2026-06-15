@@ -39,17 +39,17 @@ const METRIC_CONFIG: Record<Metric, MetricMeta> = {
     formula: "new ctx tokens introduced this turn  ÷  output tokens produced",
     watchFor:
       "Rising ratio → context growing faster than work — approaching diminishing returns",
-    yLabel: "ctx tokens per output token",
+    yLabel: "bloat score (vs. 8× anchor)  [0–1]",
     color: "#bf5af2",
   },
   workEfficiency: {
     label: "Token Cost / Artifact",
     signal: "Are meaningful turns getting more expensive to produce?",
     formula:
-      "cumulative tokens consumed  ÷  high-output turns produced (running total)",
+      "new context tokens (trailing 10 turns)  ÷  useful turns in that window",
     watchFor:
-      "Steadily rising curve = GC pressure — each useful turn costs more tokens than the last",
-    yLabel: "tokens per artifact",
+      "Rising curve = GC pressure — context grows faster than useful output appears",
+    yLabel: "token cost / artifact  [0–1, log]",
     color: "#0a84ff",
   },
 };

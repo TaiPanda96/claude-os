@@ -2,9 +2,16 @@ import { Turn } from "./types.js";
 import {
   qualityForTurn,
   QUALITY_FLOOR,
+  MARGINAL_DENSITY_ANCHOR,
+  WORK_EFFICIENCY_FLOOR,
+  WORK_EFFICIENCY_CEIL,
 } from "@claude-os/core/domain/quality-proxy.js";
 
 export type Metric = "quality" | "marginalDensity" | "workEfficiency";
+
+// Trailing window (in turns) for the token-cost-per-artifact metric. Matches the
+// recent-trend window used in sessionSummaryStats so both read "recent" the same.
+const WORK_WINDOW = 10;
 
 export interface ChartPoint {
   turnIndex: number;
@@ -13,12 +20,12 @@ export interface ChartPoint {
   // quality proxy (0–1 normalized)
   quality: number;
   outputDensity: number;
-  // marginal density: new context tokens introduced / output tokens (raw, then normalized)
+  // context bloat rate: new context tokens introduced / output tokens (raw, then anchor-scaled)
   marginalDensityRaw: number;
-  marginalDensity: number; // 0–1 normalized
-  // work efficiency: cumulative tokens consumed / cumulative high-output turns (raw, then normalized)
-  workEfficiencyRaw: number; // tokens-per-artifact at this turn
-  workEfficiency: number; // 0–1 normalized (higher = worse efficiency)
+  marginalDensity: number; // 0–1, scaled vs MARGINAL_DENSITY_ANCHOR
+  // token cost / artifact: trailing-window new context tokens / useful turns (raw, then log-scaled)
+  workEfficiencyRaw: number; // new-context tokens-per-artifact over the trailing window
+  workEfficiency: number; // 0–1 log-scaled (higher = worse efficiency)
 }
 
 export interface SessionStats {
@@ -30,7 +37,7 @@ export interface SessionStats {
   firstGCCtxPct: number | null;
   firstGCType: string | null;
   avgMarginalDensity: number; // avg new-ctx-tokens per output token
-  currentWorkEfficiency: number; // tokens-per-artifact at end of session
+  currentWorkEfficiency: number; // trailing-window new-ctx tokens per artifact, latest turn
   // Phase 3 — proactive degradation signal
   currentQuality: number; // quality at the most recent turn
   turnsToInflection: number | null; // projected turns until quality crosses QUALITY_FLOOR
@@ -43,46 +50,75 @@ export interface SessionStats {
  */
 export function computeQuality(turns: Turn[]): ChartPoint[] {
   if (turns.length === 0) return [];
-  const validTurns = turns.filter((t) => t.ctxPct <= 1.0);
-  if (validTurns.length === 0) return [];
+  // No over-window filter: ctx_pct is already clamped to ≤1.0 at ingest
+  // (see computeTurnMetrics), so every turn here is in-range.
 
   // ── Quality proxy — fixed-anchor scaling ─────────────────────────────────
   // output_density is scaled against a fixed empirical ceiling rather than the
   // per-session min-max so that absolute magnitude is preserved across sessions.
 
-  // ── Marginal density ─────────────────────────────────────────────────────
-  // effectiveInput[i] = cumulativeTokens[i] - outputTokens[i]
-  // newContextTokens[i] = effectiveInput[i] - effectiveInput[i-1]
-  // marginalDensityRaw[i] = newContextTokens[i] / outputTokens[i]
-  const effectiveInputs = validTurns.map(
+  // ── Per-turn new context ─────────────────────────────────────────────────
+  // effectiveInput[i] = cumulativeTokens[i] - outputTokens[i]  (context-window
+  //   tokens fed to the model that turn). Its turn-over-turn growth is the new
+  //   context introduced that turn — shared by both metrics below.
+  // Turn 0 reads 0: its context is the fixed base prompt (system prompt + tool
+  // defs + CLAUDE.md), a one-time cost, not bloat introduced by the session.
+  const effectiveInputs = turns.map(
     (t) => t.cumulativeTokens - t.outputTokens,
   );
-  const marginalRaw = validTurns.map((t, i) => {
-    const prev = i === 0 ? 0 : effectiveInputs[i - 1]!;
-    const newCtx = Math.max(0, effectiveInputs[i]! - prev);
-    return t.outputTokens > 0 ? newCtx / t.outputTokens : 0;
+  const newCtxTokens = turns.map((t, i) =>
+    i === 0 ? 0 : Math.max(0, effectiveInputs[i]! - effectiveInputs[i - 1]!),
+  );
+
+  // ── Context bloat rate ───────────────────────────────────────────────────
+  // marginalDensityRaw[i] = newContextTokens[i] / outputTokens[i]
+  const marginalRaw = turns.map((t, i) => {
+    if (i === 0) return 0; // baseline context, not bloat
+    if (t.outputTokens > 0) return newCtxTokens[i]! / t.outputTokens;
+    // Context grew with zero output is the worst case, not the best — saturate
+    // at the anchor rather than reporting 0 (a guard at 0 would invert the signal).
+    return newCtxTokens[i]! > 0 ? MARGINAL_DENSITY_ANCHOR : 0;
   });
-  const marginalN = normalize(marginalRaw);
+  // Fixed-anchor scaling (not per-session min-max) so the curve is comparable
+  // across sessions and immune to a single outlier flattening everything else.
+  const marginalN = marginalRaw.map((v) =>
+    Math.min(1, v / MARGINAL_DENSITY_ANCHOR),
+  );
 
-  // ── Work efficiency ───────────────────────────────────────────────────────
-  // "Useful artifact" = turn in the top 50% of output_tokens for this session.
-  // workEfficiencyRaw[i] = cumulative effectiveInput up to i / artifact count up to i
-  // Higher = more tokens spent per artifact = degrading efficiency.
-  const medianOutput =
-    [...validTurns.map((t) => t.outputTokens)].sort((a, b) => a - b)[
-      Math.floor(validTurns.length / 2)
-    ] ?? 0;
-
-  let cumulativeInput = 0;
-  let artifactCount = 0;
-  const workRaw = validTurns.map((t, i) => {
-    cumulativeInput += effectiveInputs[i]!;
-    if (t.outputTokens >= medianOutput) artifactCount++;
-    return artifactCount > 0 ? cumulativeInput / artifactCount : 0;
+  // ── Token cost / artifact ─────────────────────────────────────────────────
+  // "Artifact" = a turn whose output is at or above the *running* (prefix)
+  // median output — a causal threshold, so a turn's classification never depends
+  // on turns that haven't happened yet (the old whole-session median did).
+  // workEfficiencyRaw[i] = new context added over a trailing window
+  //   ÷ artifacts produced in that window = marginal token cost per useful turn.
+  // Unlike a cumulative average (which climbs ~linearly with turn count for any
+  // session), this stays flat while healthy and rises only when context grows
+  // faster than useful output appears.
+  const outputs = turns.map((t) => t.outputTokens);
+  const isArtifact = turns.map((t, i) => {
+    const prefix = outputs.slice(0, i + 1).sort((a, b) => a - b);
+    const median = prefix[Math.floor((prefix.length - 1) / 2)] ?? 0;
+    return t.outputTokens >= median;
   });
-  const workN = normalize(workRaw);
+  const workRaw = turns.map((_, i) => {
+    const lo = Math.max(0, i - WORK_WINDOW + 1);
+    let ctxSum = 0;
+    let artifacts = 0;
+    for (let k = lo; k <= i; k++) {
+      ctxSum += newCtxTokens[k]!;
+      if (isArtifact[k]!) artifacts++;
+    }
+    // 0 artifacts in the window = maximally inefficient: surface the full window
+    // cost (denominator floored at 1) rather than dividing by zero.
+    return ctxSum / Math.max(1, artifacts);
+  });
+  // Log scale: tokens-per-artifact spans orders of magnitude, so a fixed anchor
+  // pair (floor→0, ceil→1) keeps the curve readable and cross-session comparable.
+  const workN = workRaw.map((v) =>
+    logScale(v, WORK_EFFICIENCY_FLOOR, WORK_EFFICIENCY_CEIL),
+  );
 
-  return validTurns.map((t, i) => ({
+  return turns.map((t, i) => ({
     turnIndex: t.turnIndex,
     ctxPct: Math.round(t.ctxPct * 1000) / 10,
     gcState:
@@ -191,11 +227,14 @@ export function sessionSummaryStats(
   };
 }
 
-function normalize(values: number[]): number[] {
-  const min = Math.min(...values);
-  const max = Math.max(...values);
-  const range = max - min;
-  return range === 0
-    ? values.map(() => 0.5)
-    : values.map((v) => (v - min) / range);
+// Log-scale a raw value between two anchors → [0, 1]. floor and below map to 0,
+// ceil and above to 1, the geometric midpoint to 0.5. Used where the raw quantity
+// spans orders of magnitude (token cost / artifact) and linear scaling would
+// crush the low end.
+function logScale(value: number, floor: number, ceil: number): number {
+  const lv = Math.log10(Math.max(1, value));
+  const lo = Math.log10(floor);
+  const hi = Math.log10(ceil);
+  if (hi <= lo) return 0;
+  return Math.min(1, Math.max(0, (lv - lo) / (hi - lo)));
 }
