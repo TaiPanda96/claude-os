@@ -20,6 +20,23 @@ export const SELF_CORRECTION_ANCHOR = 5;
 // Below this the session is producing low-value output.
 export const QUALITY_FLOOR = 0.3;
 
+// Fixed soft ceiling for the context-bloat ratio (new context tokens introduced
+// in a turn ÷ that turn's output tokens). At or above this the turn is treated as
+// "fully bloated" — context ballooning with little output to show for it.
+// A fixed anchor (rather than per-session min-max) keeps the plotted curve
+// comparable across sessions and stops a single spike — e.g. one large file read —
+// from compressing every other turn toward zero. 8 is a conservative estimate;
+// the clamp handles outliers above it.
+export const MARGINAL_DENSITY_ANCHOR = 8;
+
+// Anchors for the token-cost-per-artifact curve, in new-context tokens per useful
+// turn (log-scaled between them). ~1k tok/artifact reads as efficient → 0, ~100k
+// as badly degraded → 1, the geometric midpoint (~10k) sits at 0.5. Log-scaled
+// because the raw quantity spans orders of magnitude across sessions; conservative
+// estimates, and the scale clamps anything outside the range.
+export const WORK_EFFICIENCY_FLOOR = 1_000;
+export const WORK_EFFICIENCY_CEIL = 100_000;
+
 // The three signals the quality proxy is computed from. Declared structurally so that
 // both the core `Turn` and the renderer's local `Turn` satisfy it without sharing a
 // nominal type across the package boundary.
