@@ -6,28 +6,53 @@ CLI
  → persist via repository
  → report result
 
+### Turn Lifecycle
 
-### Phase 0 -> 1:
-                    ┌───────────────────────────────── ┐
-                    │      ~/.claude/projects/         │
-                    │   <project>/<session>.jsonl      │
-                    └──────────────┬────────────────── ┘
-                                   │
-                    ┌──────────────▼──────────────────┐
-           past     │         ingest.ts               │   future
-        sessions    │   bulk ETL, run manually        │   sessions
-                    └──────────────┬──────────────────┘
-                                   │
-                    ┌──────────────▼────────────────── ┐
-                    │       claude-os.sqlite           │
-                    │  sessions / turns / gc_events    │
-                    └──────────────▲────────────────── ┘
-                                   │
-                    ┌──────────────┴────────────────── ┐
-           live     │        hook-stop.ts              │
-        sessions    │  fires on every Claude Code      │
-                    │  turn via Stop hook              │
-                    └───────────────────────────────── ┘
+  Turn lifecycle: user → Claude → Stop hook → SQLite
+
+  ┌──────────────┐
+  │  Claude Code  │  user prompts, Claude responds — each exchange appends
+  │   session     │  user/assistant records to the session transcript:
+  └──────┬────────┘  ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl
+         │
+         │  turn completes → Claude Code fires the Stop hook
+         │  (blocks until the hook exits; passes JSON on stdin)
+         ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │  scripts/hook-stop.ts        (the live feed)                  │
+  │                                                               │
+  │  1. read stdin → { session_id, transcript_path }              │
+  │  2. findJsonlForSession()  → resolve the .jsonl path          │
+  │         · use transcript_path if it exists                    │
+  │         · else scan ~/.claude/projects for a file whose       │
+  │           name contains session_id                            │
+  │  3. open SQLite (WAL, FK on) + initializeSchemas()            │
+  │  4. ingestJsonLFile(db, filePath)                             │
+  │  5. db.close(); exit 0  (always — never blocks Claude Code)   │
+  └──────────────────────────┬──────────────────────────────────┘
+                             │
+                             ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │  ingestJsonLFile()       (shared by hook + bulk ingest.ts)    │
+  │                                                               │
+  │  • parse every JSONL line → records                           │
+  │  • index user records by uuid       (for latency)             │
+  │  • group assistant records by sessionId, sort by timestamp    │
+  │  • upsertSession(...)                                          │
+  │  • for each assistant turn:                                   │
+  │      computeTurnMetrics()  → ctxPct, outputDensity,           │
+  │                              selfCorrection, repetitionScore  │
+  │      recordTurn()          → INSERT OR IGNORE                 │
+  └──────────────────────────┬──────────────────────────────────┘
+                             │
+                             ▼
+  ┌─────────────────────────────────────────────────────────────┐
+  │  claude-os.sqlite                                             │
+  │    sessions   ← upsertSession                                │
+  │    turns      ← INSERT OR IGNORE (UNIQUE session_id,turn_idx)│  ← idempotent
+  │    gc_events  ← on first GC state transition (Soft/Hard/Aged)│
+  └─────────────────────────────────────────────────────────────┘
+  └─────────────────────────────────────────────────────────────┘
 
 
 ### Unified turn pipeline — single source of truth
