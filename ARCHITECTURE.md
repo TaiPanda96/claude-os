@@ -1,58 +1,76 @@
-### Claude OS Phase 0 has the following architecture
-CLI
- → discover input files
- → parse JSONL records
- → normalize into domain rows
- → persist via repository
- → report result
+# Claude OS — Architecture
+
+This document maps the data flow: how Claude Code sessions become rows in SQLite,
+how both the live hook and the historical backfill share one ingestion pipeline,
+and where each script fits. For product framing see [`README.md`](README.md), for
+setup/troubleshooting [`RUNBOOK.md`](RUNBOOK.md), and for metric definitions
+[`analysis/TERMINOLOGY.md`](analysis/TERMINOLOGY.md).
+
+At its core every entry point is the same pipeline:
+
+```
+discover input  →  parse JSONL records  →  normalize into domain rows
+                →  compute per-turn metrics  →  persist (idempotent)  →  report
+```
 
 ### Turn Lifecycle
 
-  Turn lifecycle: user → Claude → Stop hook → SQLite
+A single Claude Code turn becomes one row in SQLite by flowing through four
+stages: `user → Claude → Stop hook → ingest → SQLite`. The hook is the live
+feed; everything downstream of it is shared with the bulk backfill (`ingest.ts`).
 
-  ┌──────────────┐
-  │  Claude Code  │  user prompts, Claude responds — each exchange appends
-  │   session     │  user/assistant records to the session transcript:
-  └──────┬────────┘  ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl
-         │
-         │  turn completes → Claude Code fires the Stop hook
-         │  (blocks until the hook exits; passes JSON on stdin)
-         ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │  scripts/hook-stop.ts        (the live feed)                  │
-  │                                                               │
-  │  1. read stdin → { session_id, transcript_path }              │
-  │  2. findJsonlForSession()  → resolve the .jsonl path          │
-  │         · use transcript_path if it exists                    │
-  │         · else scan ~/.claude/projects for a file whose       │
-  │           name contains session_id                            │
-  │  3. open SQLite (WAL, FK on) + initializeSchemas()            │
-  │  4. ingestJsonLFile(db, filePath)                             │
-  │  5. db.close(); exit 0  (always — never blocks Claude Code)   │
-  └──────────────────────────┬──────────────────────────────────┘
-                             │
-                             ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │  ingestJsonLFile()       (shared by hook + bulk ingest.ts)    │
-  │                                                               │
-  │  • parse every JSONL line → records                           │
-  │  • index user records by uuid       (for latency)             │
-  │  • group assistant records by sessionId, sort by timestamp    │
+```
+  ┌────────────────────────────────────────────────────────────────┐
+  │  Claude Code session                                           │
+  │  Each turn appends a user + assistant record to the            │
+  │  session transcript:                                           │
+  │  ~/.claude/projects/<encoded-cwd>/<session_id>.jsonl           │
+  └───────────────────────────────┬────────────────────────────────┘
+                                  │
+                                  │  turn completes → Claude Code fires the Stop hook
+                                  │  (blocks until the hook exits; JSON on stdin)
+                                  ▼
+  ┌────────────────────────────────────────────────────────────────┐
+  │  scripts/hook-stop.ts            (the live feed)               │
+  │                                                                │
+  │  1. read stdin → { session_id, transcript_path }               │
+  │  2. findJsonlForSession() → resolve the .jsonl path            │
+  │       · use transcript_path if it exists                       │
+  │       · else scan ~/.claude/projects for a file whose          │
+  │         name contains session_id                               │
+  │  3. open SQLite (WAL, FK on) + initializeSchemas()             │
+  │  4. ingestJsonLFile(db, filePath)                              │
+  │  5. db.close(); exit 0  — always; never blocks Claude          │
+  └───────────────────────────────┬────────────────────────────────┘
+                                  │
+                                  ▼
+  ┌────────────────────────────────────────────────────────────────┐
+  │  ingestJsonLFile()      (shared by hook + ingest.ts)           │
+  │                                                                │
+  │  • parse every JSONL line → records                            │
+  │  • index user records by uuid          (for latency)           │
+  │  • group assistant records by session, sort by time            │
   │  • upsertSession(...)                                          │
-  │  • for each assistant turn:                                   │
-  │      computeTurnMetrics()  → ctxPct, outputDensity,           │
-  │                              selfCorrection, repetitionScore  │
-  │      recordTurn()          → INSERT OR IGNORE                 │
-  └──────────────────────────┬──────────────────────────────────┘
-                             │
-                             ▼
-  ┌─────────────────────────────────────────────────────────────┐
-  │  claude-os.sqlite                                             │
-  │    sessions   ← upsertSession                                │
-  │    turns      ← INSERT OR IGNORE (UNIQUE session_id,turn_idx)│  ← idempotent
-  │    gc_events  ← on first GC state transition (Soft/Hard/Aged)│
-  └─────────────────────────────────────────────────────────────┘
-  └─────────────────────────────────────────────────────────────┘
+  │  • for each assistant turn:                                    │
+  │      computeTurnMetrics() → ctxPct, outputDensity,             │
+  │                             selfCorrection, repetition         │
+  │      recordTurn()         → INSERT OR IGNORE                   │
+  └───────────────────────────────┬────────────────────────────────┘
+                                  │
+                                  ▼
+  ┌────────────────────────────────────────────────────────────────┐
+  │  claude-os.sqlite                                              │
+  │    sessions   ← upsertSession                                  │
+  │    turns      ← INSERT OR IGNORE (UNIQUE session,turn)         │
+  │    gc_events  ← on first GC transition (Soft/Hard/Aged)        │
+  └────────────────────────────────────────────────────────────────┘
+```
+
+The `turns` write is idempotent: `INSERT OR IGNORE` against the
+`UNIQUE (session_id, turn_index)` index means re-ingesting a session — live or
+via backfill — never produces duplicate rows. The per-turn metric definitions
+referenced here (`ctxPct`, `outputDensity`, and the quality signals) are spelled
+out in [`analysis/TERMINOLOGY.md`](analysis/TERMINOLOGY.md).
 
 
 ### Unified turn pipeline — single source of truth

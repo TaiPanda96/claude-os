@@ -181,4 +181,9 @@ app.post("/sessions/:id/compact", async (c) => {
   });
 });
 
-export default { port: PORT, fetch: app.fetch };
+// Bind to loopback only — this API is unauthenticated and serves full session
+// transcripts plus key-spending compaction endpoints. Without an explicit
+// hostname, Bun.serve listens on 0.0.0.0 (all interfaces), exposing it to the
+// local network. The Electron app talks to http://localhost:7842, so 127.0.0.1
+// is sufficient.
+export default { port: PORT, hostname: "127.0.0.1", fetch: app.fetch };
