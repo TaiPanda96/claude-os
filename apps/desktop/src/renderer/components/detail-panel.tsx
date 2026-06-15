@@ -18,7 +18,20 @@ const DEFAULT_HEIGHT = 420;
 
 export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
+  const [copied, setCopied] = useState(false);
   const dragStart = useRef<{ y: number; h: number } | null>(null);
+  const copyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const onCopyId = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(session.id);
+      setCopied(true);
+      if (copyTimer.current) clearTimeout(copyTimer.current);
+      copyTimer.current = setTimeout(() => setCopied(false), 1200);
+    } catch {
+      // Clipboard can reject (e.g. unfocused document) — leave the id visible to copy manually.
+    }
+  }, [session.id]);
 
   const onDragStart = useCallback(
     (e: React.MouseEvent) => {
@@ -59,7 +72,13 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
       <div style={styles.header}>
         <span className={`gc-dot gc-dot--${state}`} />
         <span style={styles.sessionName}>{session.name ?? "unnamed"}</span>
-        <span style={styles.sessionId}>{session.id.slice(0, 8)}</span>
+        <button
+          style={styles.sessionId}
+          onClick={onCopyId}
+          title={copied ? "Copied!" : `Copy session id: ${session.id}`}
+        >
+          {copied ? "✓ copied" : `${session.id.slice(0, 8)} ⎘`}
+        </button>
         <span style={{ ...styles.ctxBadge, color: textColor }}>
           {(Math.min(1, pct) * 100).toFixed(1)}% ctx
         </span>
@@ -128,7 +147,12 @@ const styles: Record<string, React.CSSProperties> = {
   sessionId: {
     fontSize: tokens.fsMicro,
     fontFamily: tokens.fontMono,
-    color: tokens.border,
+    color: tokens.muted,
+    background: "transparent",
+    border: "none",
+    cursor: "pointer",
+    padding: "2px 4px",
+    borderRadius: tokens.radiusXs,
   },
   ctxBadge: {
     fontSize: tokens.fsData,
