@@ -18,6 +18,7 @@ import { homedir } from "os";
 import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file.js";
 import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
 import { printIngestStats } from "@claude-os/core/ingest/print-ingest-stats.js";
+import { migrateDb } from "@claude-os/core/db/migrate.js";
 
 const PROJECTS = join(homedir(), ".claude", "projects");
 
@@ -52,6 +53,9 @@ program
     const DB_PATH = values.db ?? join(import.meta.dir, "../claude-os.sqlite");
     // ── DB setup ─────────────────────────────────────────────────────────────────
     const db = new Database(DB_PATH);
+    db.run("PRAGMA journal_mode = WAL");
+    db.run("PRAGMA foreign_keys = ON");
+    migrateDb(db);
     initializeSchemas(db);
 
     // ── Main ──────────────────────────────────────────────────────────────────────

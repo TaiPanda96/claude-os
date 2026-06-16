@@ -3,6 +3,7 @@ import { basename } from "node:path";
 import { AssistantRecord, MODEL_CONTEXT_WINDOWS, UserRecord, Database, GCState } from "../types.js";
 import { resolveProjectId, upsertSession } from "../db.js";
 import { computeTurnMetrics, recordTurn } from "./record-turn.js";
+import { PRICING_VERSION } from "../pricing.js";
 
 export interface IngestResult {
   /** Session number denotes the given session ingested */
@@ -117,6 +118,7 @@ export function ingestJsonLFile(
         createdAt: new Date(record.timestamp).getTime(),
         model,
         cwd,
+        pricingVersion: PRICING_VERSION,
       });
 
       const { inserted, gcState } = recordTurn(db, turn, prevGCState);
