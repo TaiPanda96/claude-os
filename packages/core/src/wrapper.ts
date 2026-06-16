@@ -118,6 +118,7 @@ export function createInstrumentedClient(
       createdAt: Date.now(),
       model,
       cwd: options.cwd ?? process.cwd(),
+      pricingVersion: "claude-sonnet-4-6", // for future-proofing; currently all models use the same pricing
     });
 
     const { gcState, gcTransitioned } = recordTurn(db, turn, lastGCState);
