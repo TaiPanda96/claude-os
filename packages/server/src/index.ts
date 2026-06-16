@@ -12,6 +12,8 @@ import {
   getCompactionEvents,
   compaction,
   TriggerTypeEnum,
+  computeCostUsd,
+  getPricing,
 } from "@claude-os/core";
 import type { CompactionPolicy, CompactionLifecycleEvent } from "@claude-os/core";
 import { publish, subscribe, inProcessEventSink } from "./compaction-event-bus.js";
@@ -104,6 +106,102 @@ app.get("/sessions/:id/gc-events", (c) => {
     )
     .all({ $sessionId: c.req.param("id") });
   return c.json(events);
+});
+
+// ── Spend endpoints ───────────────────────────────────────────────────────────
+
+app.get("/spend/daily", (c) => {
+  const db = getDb();
+  const rows = db
+    .prepare(
+      `SELECT
+        date(t.created_at / 1000, 'unixepoch', 'localtime') AS day,
+        s.model,
+        SUM(t.input_tokens)           AS input_tokens,
+        SUM(t.output_tokens)          AS output_tokens,
+        SUM(t.cache_read_tokens)      AS cache_read_tokens,
+        SUM(t.cache_creation_tokens)  AS cache_creation_tokens
+       FROM turns t
+       JOIN sessions s ON s.id = t.session_id
+       GROUP BY day, s.model
+       ORDER BY day DESC`,
+    )
+    .all() as Array<{
+    day: string;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_creation_tokens: number;
+  }>;
+
+  const annotated = rows.map((r) => {
+    const { pricing, fallback } = getPricing(r.model);
+    return {
+      ...r,
+      cost_usd: computeCostUsd(
+        pricing,
+        r.input_tokens,
+        r.output_tokens,
+        r.cache_read_tokens,
+        r.cache_creation_tokens,
+      ),
+      pricing_fallback: fallback,
+    };
+  });
+
+  return c.json(annotated);
+});
+
+app.get("/spend/sessions", (c) => {
+  const db = getDb();
+  const sinceDays = Number(c.req.query("since_days") ?? "30");
+  const since = sinceDays > 0 ? Date.now() - sinceDays * 86_400_000 : 0;
+
+  const rows = db
+    .prepare(
+      `SELECT
+        s.id,
+        s.name,
+        s.model,
+        s.last_active_at,
+        SUM(t.input_tokens)           AS input_tokens,
+        SUM(t.output_tokens)          AS output_tokens,
+        SUM(t.cache_read_tokens)      AS cache_read_tokens,
+        SUM(t.cache_creation_tokens)  AS cache_creation_tokens
+       FROM sessions s
+       JOIN turns t ON t.session_id = s.id
+       WHERE s.last_active_at >= $since
+       GROUP BY s.id
+       ORDER BY s.last_active_at DESC`,
+    )
+    .all({ $since: since }) as Array<{
+    id: string;
+    name: string | null;
+    model: string;
+    last_active_at: number;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_creation_tokens: number;
+  }>;
+
+  const annotated = rows.map((r) => {
+    const { pricing, fallback } = getPricing(r.model);
+    return {
+      ...r,
+      cost_usd: computeCostUsd(
+        pricing,
+        r.input_tokens,
+        r.output_tokens,
+        r.cache_read_tokens,
+        r.cache_creation_tokens,
+      ),
+      pricing_fallback: fallback,
+    };
+  });
+
+  return c.json(annotated);
 });
 
 // ── Policy management ─────────────────────────────────────────────────────────

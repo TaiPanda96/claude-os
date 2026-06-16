@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 
 // Bump SCHEMA_VERSION and add a new version block whenever the schema changes.
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export function migrateDb(db: Database): void {
   const version = (db.prepare("PRAGMA user_version").get() as { user_version: number })
@@ -15,6 +15,9 @@ export function migrateDb(db: Database): void {
     }
     if (version < 2) {
       v2(db);
+    }
+    if (version < 3) {
+      v3(db);
     }
     db.run(`PRAGMA user_version = ${SCHEMA_VERSION}`);
     db.run("COMMIT");
@@ -147,4 +150,15 @@ function v2(db: Database): void {
     )
     WHERE project_id IS NULL
   `);
+}
+
+// ── v3: cost telemetry — pricing_version on turns ─────────────────────────────
+
+function v3(db: Database): void {
+  // SQLite does not support ALTER TABLE … ADD COLUMN IF NOT EXISTS; use try/catch.
+  try {
+    db.run(`ALTER TABLE turns ADD COLUMN pricing_version TEXT NOT NULL DEFAULT ''`);
+  } catch {
+    /* column already exists */
+  }
 }

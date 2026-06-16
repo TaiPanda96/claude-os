@@ -79,3 +79,10 @@ export type {
   TriggerConfig,
 } from "./types.js";
 export { TriggerTypeEnum } from "./types.js";
+export {
+  PRICING_VERSION,
+  MODEL_PRICING,
+  computeCostUsd,
+  getPricing,
+} from "./pricing.js";
+export type { ModelPricing } from "./pricing.js";

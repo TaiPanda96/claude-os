@@ -21,6 +21,7 @@ export interface RawTurnInput {
   createdAt: number;
   model: string;
   cwd: string;
+  pricingVersion: string;
 }
 
 export interface RecordTurnResult {
@@ -56,6 +57,7 @@ export function computeTurnMetrics(input: RawTurnInput): Turn {
     cacheReadTokens: input.cacheReadTokens,
     cacheCreationTokens: input.cacheCreationTokens,
     effectiveInputTokens: effectiveInput,
+    pricingVersion: input.pricingVersion,
     cwd: input.cwd,
   };
 }
@@ -72,12 +74,12 @@ export function recordTurn(db: Database, turn: Turn, prevGCState: GCState): Reco
         id, session_id, turn_index, input_tokens, output_tokens, cumulative_tokens,
         ctx_pct, latency_ms, stop_reason, created_at,
         self_correction_count, repetition_score, output_density,
-        cache_read_tokens, cache_creation_tokens, effective_input_tokens, cwd
+        cache_read_tokens, cache_creation_tokens, effective_input_tokens, pricing_version, cwd
       ) VALUES (
         $id, $sessionId, $turnIndex, $inputTokens, $outputTokens, $cumulativeTokens,
         $ctxPct, $latencyMs, $stopReason, $createdAt,
         $selfCorrectionCount, $repetitionScore, $outputDensity,
-        $cacheRead, $cacheCreation, $effectiveInput, $cwd
+        $cacheRead, $cacheCreation, $effectiveInput, $pricingVersion, $cwd
       )`,
     )
     .run({
@@ -94,9 +96,10 @@ export function recordTurn(db: Database, turn: Turn, prevGCState: GCState): Reco
       $selfCorrectionCount: turn.selfCorrectionCount,
       $repetitionScore: turn.repetitionScore,
       $outputDensity: turn.outputDensity,
-      $cacheRead: turn.cacheReadTokens ?? 0,
-      $cacheCreation: turn.cacheCreationTokens ?? 0,
-      $effectiveInput: turn.effectiveInputTokens ?? 0,
+      $cacheRead: turn.cacheReadTokens,
+      $cacheCreation: turn.cacheCreationTokens,
+      $effectiveInput: turn.effectiveInputTokens,
+      $pricingVersion: turn.pricingVersion,
       $cwd: turn.cwd ?? null,
     });
 

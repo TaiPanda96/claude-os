@@ -35,9 +35,10 @@ export interface Turn {
   repetitionScore: number; // 0–1, bigram overlap with previous turn output
   outputDensity: number; // output_tokens / effectiveInputTokens
   // Cache / extended fields (present when ingested from JSONL or live wrapper)
-  cacheReadTokens?: number;
-  cacheCreationTokens?: number;
-  effectiveInputTokens?: number;
+  cacheReadTokens: number;
+  cacheCreationTokens: number;
+  effectiveInputTokens: number;
+  pricingVersion: string; // PRICING_VERSION constant from pricing.ts, snapshotted at ingest
   cwd?: string;
 }
 

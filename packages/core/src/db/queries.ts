@@ -305,6 +305,11 @@ function rowToTurn(r: any): Turn {
     selfCorrectionCount: r.self_correction_count,
     repetitionScore: r.repetition_score,
     outputDensity: r.output_density,
+    cacheReadTokens: r.cache_read_tokens ?? 0,
+    cacheCreationTokens: r.cache_creation_tokens ?? 0,
+    effectiveInputTokens: r.effective_input_tokens ?? 0,
+    pricingVersion: r.pricing_version ?? "",
+    cwd: r.cwd ?? undefined,
   };
 }
 
