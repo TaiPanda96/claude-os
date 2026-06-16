@@ -1,16 +1,16 @@
 import { Turn } from "./types.js";
 import {
   qualityForTurn,
-  QUALITY_FLOOR,
   MARGINAL_DENSITY_ANCHOR,
   WORK_EFFICIENCY_FLOOR,
   WORK_EFFICIENCY_CEIL,
 } from "@claude-os/core/domain/quality-proxy.js";
+import { computeSessionTrend } from "@claude-os/core/domain/session-trend.js";
 
 export type Metric = "quality" | "marginalDensity" | "workEfficiency";
 
 // Trailing window (in turns) for the token-cost-per-artifact metric. Matches the
-// recent-trend window used in sessionSummaryStats so both read "recent" the same.
+// recent-trend window in the shared session-trend core so both read "recent" the same.
 const WORK_WINDOW = 10;
 
 export interface ChartPoint {
@@ -63,9 +63,7 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
   //   context introduced that turn — shared by both metrics below.
   // Turn 0 reads 0: its context is the fixed base prompt (system prompt + tool
   // defs + CLAUDE.md), a one-time cost, not bloat introduced by the session.
-  const effectiveInputs = turns.map(
-    (t) => t.cumulativeTokens - t.outputTokens,
-  );
+  const effectiveInputs = turns.map((t) => t.cumulativeTokens - t.outputTokens);
   const newCtxTokens = turns.map((t, i) =>
     i === 0 ? 0 : Math.max(0, effectiveInputs[i]! - effectiveInputs[i - 1]!),
   );
@@ -81,9 +79,7 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
   });
   // Fixed-anchor scaling (not per-session min-max) so the curve is comparable
   // across sessions and immune to a single outlier flattening everything else.
-  const marginalN = marginalRaw.map((v) =>
-    Math.min(1, v / MARGINAL_DENSITY_ANCHOR),
-  );
+  const marginalN = marginalRaw.map((v) => Math.min(1, v / MARGINAL_DENSITY_ANCHOR));
 
   // ── Token cost / artifact ─────────────────────────────────────────────────
   // "Artifact" = a turn whose output is at or above the *running* (prefix)
@@ -114,15 +110,12 @@ export function computeQuality(turns: Turn[]): ChartPoint[] {
   });
   // Log scale: tokens-per-artifact spans orders of magnitude, so a fixed anchor
   // pair (floor→0, ceil→1) keeps the curve readable and cross-session comparable.
-  const workN = workRaw.map((v) =>
-    logScale(v, WORK_EFFICIENCY_FLOOR, WORK_EFFICIENCY_CEIL),
-  );
+  const workN = workRaw.map((v) => logScale(v, WORK_EFFICIENCY_FLOOR, WORK_EFFICIENCY_CEIL));
 
   return turns.map((t, i) => ({
     turnIndex: t.turnIndex,
     ctxPct: Math.round(t.ctxPct * 1000) / 10,
-    gcState:
-      t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
+    gcState: t.ctxPct >= 0.8 ? "hard_gc" : t.ctxPct >= 0.6 ? "soft_gc" : "clean",
     quality: qualityForTurn(t),
     outputDensity: t.outputDensity ?? 0,
     marginalDensityRaw: marginalRaw[i]!,
@@ -152,78 +145,33 @@ export function sessionSummaryStats(
   };
   if (points.length === 0) return empty;
 
-  // Peak — skip first 3 warm-up turns
-  const eligible = points.slice(Math.min(3, points.length - 1));
-  const peak = eligible.reduce(
-    (best, p) => (p.quality > best.quality ? p : best),
-    eligible[0]!,
-  );
+  // Peak, inflection, recent trend, and the turns-to-inflection projection all come
+  // from the shared session-trend core so they can't drift from the server's /health.
+  const trend = computeSessionTrend(points);
 
-  // Inflection — rolling linear regression, matching the notebook's find_inflection().
-  // Window = max(3, n/5) turns. First ctx_pct where slope is negative two windows in a row.
-  let inflectionCtxPct: number | null = null;
-  if (points.length >= 6) {
-    const w = Math.max(3, Math.floor(points.length / 5));
-    let prevNeg = false;
-    for (let i = w; i < points.length; i++) {
-      const slice = points.slice(i - w, i);
-      const n = slice.length;
-      const sumX = slice.reduce((s, p) => s + p.ctxPct, 0);
-      const sumY = slice.reduce((s, p) => s + p.quality, 0);
-      const sumXY = slice.reduce((s, p) => s + p.ctxPct * p.quality, 0);
-      const sumX2 = slice.reduce((s, p) => s + p.ctxPct * p.ctxPct, 0);
-      const denom = n * sumX2 - sumX * sumX;
-      const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0;
-      if (slope < 0 && prevNeg) {
-        inflectionCtxPct = points[i - 1]!.ctxPct;
-        break;
-      }
-      prevNeg = slope < 0;
-    }
-  }
-
-  // Recent trend — slope over last 10 turns
+  // Recent average over the same trailing window the trend slope uses (the last 10),
+  // for the peak-relative quality delta.
   const tail = points.slice(-10);
-  const slope =
-    tail.length >= 2
-      ? (tail[tail.length - 1]!.quality - tail[0]!.quality) / tail.length
-      : 0;
-  const recentTrend =
-    slope > 0.01 ? "rising" : slope < -0.01 ? "declining" : "flat";
-
   const recentAvg = tail.reduce((s, p) => s + p.quality, 0) / tail.length;
 
   // Avg marginal density (raw, in tokens) across session
-  const avgMarginalDensity =
-    points.reduce((s, p) => s + p.marginalDensityRaw, 0) / points.length;
+  const avgMarginalDensity = points.reduce((s, p) => s + p.marginalDensityRaw, 0) / points.length;
 
   // Work efficiency at the end of the session (raw tokens-per-artifact)
   const currentWorkEfficiency = points[points.length - 1]!.workEfficiencyRaw;
 
-  const currentQuality = points[points.length - 1]!.quality;
-
-  // turnsToInflection — linear extrapolation from the last 10 quality points.
-  // Projects how many more turns until quality crosses QUALITY_FLOOR.
-  // Only meaningful when the recent slope is negative; null otherwise.
-  let turnsToInflection: number | null = null;
-  if (slope < -0.01 && currentQuality > QUALITY_FLOOR) {
-    // slope is quality-change-per-turn; solve for turns: floor = current + slope * t
-    const t = (QUALITY_FLOOR - currentQuality) / slope;
-    turnsToInflection = t > 0 ? Math.round(t) : null;
-  }
-
   return {
-    peakQuality: peak.quality,
-    peakCtxPct: peak.ctxPct,
-    inflectionCtxPct,
-    recentTrend,
-    qualityDelta: recentAvg - peak.quality,
+    peakQuality: trend.peakQuality,
+    peakCtxPct: trend.peakCtxPct,
+    inflectionCtxPct: trend.inflectionCtxPct,
+    recentTrend: trend.recentTrend,
+    qualityDelta: recentAvg - trend.peakQuality,
     firstGCCtxPct,
     firstGCType,
     avgMarginalDensity: Math.round(avgMarginalDensity),
     currentWorkEfficiency,
-    currentQuality,
-    turnsToInflection,
+    currentQuality: trend.currentQuality,
+    turnsToInflection: trend.turnsToInflection,
   };
 }
 
