@@ -89,7 +89,11 @@ function v2(db: Database): void {
       created_at INTEGER NOT NULL
     )
   `);
-  db.run(`ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)`);
+  try {
+    db.run(`ALTER TABLE sessions ADD COLUMN project_id TEXT REFERENCES projects(id)`);
+  } catch {
+    /* column already exists — DB was initialised before migrateDb was wired in */
+  }
   db.run(`CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_id)`);
   db.run(`
     CREATE TABLE IF NOT EXISTS compaction_policies (
