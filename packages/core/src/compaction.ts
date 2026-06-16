@@ -108,13 +108,17 @@ export async function compaction(
 
       const result = await writeMemoryFileToDir(dir, file, outputText);
       filesWritten.push(result);
-      sink.emit({
-        type: "compaction.file_written",
-        eventId,
-        sessionId,
-        file: result,
-        at: new Date().toISOString(),
-      });
+      try {
+        sink.emit({
+          type: "compaction.file_written",
+          eventId,
+          sessionId,
+          file: result,
+          at: new Date().toISOString(),
+        });
+      } catch {
+        /* best-effort: event sinks must not break compaction */
+      }
     }
 
     const completed_at = new Date().toISOString();
