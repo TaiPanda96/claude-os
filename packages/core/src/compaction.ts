@@ -70,16 +70,19 @@ export async function compaction(
   };
 
   insertCompactionEvent(db, event);
-  sink.emit({
-    type: "compaction.started",
-    eventId,
-    sessionId,
-    policyId: policy.id,
-    triggeredBy,
-    tokensAtTrigger,
-    at: now,
-  });
-
+  try {
+    sink.emit({
+      type: "compaction.started",
+      eventId,
+      sessionId,
+      policyId: policy.id,
+      triggeredBy,
+      tokensAtTrigger,
+      at: now,
+    });
+  } catch {
+    /* best-effort: event sinks must not break compaction */
+  }
   try {
     const turns = getSessionTurns(db, sessionId);
     const lastEvent = getLastCompactionEvent(db, sessionId);
