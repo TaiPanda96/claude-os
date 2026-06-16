@@ -37,6 +37,8 @@ export {
   QUALITY_FLOOR,
 } from "./domain/quality-proxy.js";
 export type { QualitySignals } from "./domain/quality-proxy.js";
+export { computeSessionTrend } from "./domain/session-trend.js";
+export type { TrendPoint, SessionTrend } from "./domain/session-trend.js";
 export {
   AnthropicLlm,
   llmPortFactory,

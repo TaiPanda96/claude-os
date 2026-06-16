@@ -33,7 +33,7 @@ DB path: `CLAUDE_OS_DB_PATH` env var, else repo-root `claude-os.sqlite`. `getDb(
 
 ### Invariants worth not breaking
 
-- **The per-turn quality formula is duplicated in `packages/core/src/health.ts` (`qualityForTurn`) and `apps/desktop/src/renderer/quality.ts` — change both together.** A comment marks it in `health.ts`. Divergence is silent.
+- **Quality/health logic has one home each — don't re-inline it.** The per-turn quality formula lives in `packages/core/src/domain/quality-proxy.ts` (`qualityForTurn`); the session-level degradation stats (peak/inflection/trend/turnsToInflection) live in `packages/core/src/domain/session-trend.ts` (`computeSessionTrend`). Both `health.ts` (server) and `apps/desktop/src/renderer/quality.ts` (renderer) import from these — keep it that way so the two sides can't silently diverge across the wire.
 - Ingest (live hook + bulk) funnels through `ingestJsonLFile` and writes `INSERT OR IGNORE` — idempotent, safe to re-run.
 - `scripts/hook-stop.ts` runs on every turn and **Claude Code blocks on it before returning control** — so it must stay fast, silent, do no network I/O, and exit 0 unconditionally.
 - Single-source-of-truth constants — GC thresholds (`GC_THRESHOLDS`), context windows (`MODEL_CONTEXT_WINDOWS`) in `types.ts`; compaction model selection in `compaction.ts`/`trigger-evaluator.ts`. Reference these by name; never copy their values into docs or other code.
