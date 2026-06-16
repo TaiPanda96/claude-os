@@ -46,6 +46,13 @@ export type {
   SummarizerPort,
   LlmPorts,
 } from "./domain/llm-ports.js";
+export { noopEventSink } from "./domain/compaction-lifecycle-event.js";
+export type {
+  CompactionEventSink,
+  CompactionLifecycleEvent,
+  CompactionLifecycleEventType,
+} from "./domain/compaction-lifecycle-event.js";
+export { HttpEventSink } from "./infrastructure/http-event-sink.js";
 export {
   resolveProjectId,
   upsertSession,

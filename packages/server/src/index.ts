@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
+import { streamSSE } from "hono/streaming";
 import { v4 as uuidv4 } from "uuid";
 import {
   getDb,
@@ -12,7 +13,8 @@ import {
   compaction,
   TriggerTypeEnum,
 } from "@claude-os/core";
-import type { CompactionPolicy } from "@claude-os/core";
+import type { CompactionPolicy, CompactionLifecycleEvent } from "@claude-os/core";
+import { publish, subscribe, inProcessEventSink } from "./compaction-event-bus.js";
 
 /**
  * The main server entry point for the Claude OS application. This server provides API endpoints for managing sessions, turns, and garbage collection events.
@@ -141,6 +143,37 @@ app.get("/sessions/:id/compaction-events", (c) => {
   return c.json(events);
 });
 
+// ── Compaction lifecycle events (webhook ingest + SSE fan-out) ─────────────────
+
+// Out-of-process producers (the instrumented client's HttpEventSink) POST lifecycle
+// events here. We log + broadcast them; there is no persistence by design — the
+// compaction_events table remains the durable audit trail.
+app.post("/webhooks/compaction", async (c) => {
+  const event = (await c.req.json()) as CompactionLifecycleEvent;
+  if (!event?.type || !event.eventId || !event.sessionId) {
+    return c.json({ error: "invalid lifecycle event" }, 400);
+  }
+  publish(event);
+  return c.body(null, 202);
+});
+
+// Live stream of compaction lifecycle events for the desktop UI. Each event is sent as a
+// named SSE event (its `type`), so the renderer can switch on it without parsing first.
+app.get("/events", (c) =>
+  streamSSE(c, async (stream) => {
+    const unsubscribe = subscribe((event) => {
+      void stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+    });
+    stream.onAbort(unsubscribe);
+    // Heartbeat keeps the connection from being reaped while idle; loop exits on abort.
+    while (!stream.aborted) {
+      await stream.writeSSE({ event: "ping", data: "{}" });
+      await stream.sleep(15_000);
+    }
+    unsubscribe();
+  }),
+);
+
 // ── Manual compaction ─────────────────────────────────────────────────────────
 
 app.post("/sessions/:id/compact", async (c) => {
@@ -160,7 +193,8 @@ app.post("/sessions/:id/compact", async (c) => {
   if (!turns.length || !lastTurn)
     return c.json({ error: "no turns in session" }, 400);
 
-  // Run in background, return immediately with event id
+  // Run in background, return immediately with event id. In-process sink broadcasts the
+  // lifecycle stream straight to SSE subscribers (no HTTP round-trip needed here).
   const eventPromise = compaction(
     db,
     sessionId,
@@ -169,6 +203,8 @@ app.post("/sessions/:id/compact", async (c) => {
     "manual compaction",
     lastTurn.cumulativeTokens,
     (session as any).cwd ?? "",
+    undefined,
+    inProcessEventSink,
   );
 
   // Fire and forget — client polls /compaction-events for result

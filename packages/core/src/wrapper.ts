@@ -14,6 +14,7 @@ import { evaluateCompactionTriggers } from "./evaluate-compaction-triggers.js";
 import type { Session, GCState } from "./types.js";
 import { computeTurnMetrics, recordTurn } from "./ingest/record-turn.js";
 import { LlmPorts } from "./index.js";
+import type { CompactionEventSink } from "./domain/compaction-lifecycle-event.js";
 
 interface WrapperOptions {
   sessionName?: string;
@@ -22,6 +23,9 @@ interface WrapperOptions {
   cwd?: string;
   onGCStateChange?: (state: GCState, ctxPct: number) => void;
   ports?: LlmPorts;
+  // Where compaction lifecycle events go. Out-of-process callers pass an HttpEventSink
+  // pointed at the Hono server; omitted means events are dropped (noop default downstream).
+  eventSink?: CompactionEventSink;
 }
 
 interface InstrumentedClient {
@@ -126,6 +130,7 @@ export function createInstrumentedClient(
       outputText,
       options.cwd ?? process.cwd(),
       options.ports,
+      options.eventSink,
     );
 
     if (gcTransitioned) {
