@@ -70,16 +70,19 @@ export async function compaction(
   };
 
   insertCompactionEvent(db, event);
-  sink.emit({
-    type: "compaction.started",
-    eventId,
-    sessionId,
-    policyId: policy.id,
-    triggeredBy,
-    tokensAtTrigger,
-    at: now,
-  });
-
+  try {
+    sink.emit({
+      type: "compaction.started",
+      eventId,
+      sessionId,
+      policyId: policy.id,
+      triggeredBy,
+      tokensAtTrigger,
+      at: now,
+    });
+  } catch {
+    /* best-effort: event sinks must not break compaction */
+  }
   try {
     const turns = getSessionTurns(db, sessionId);
     const lastEvent = getLastCompactionEvent(db, sessionId);
@@ -108,13 +111,17 @@ export async function compaction(
 
       const result = await writeMemoryFileToDir(dir, file, outputText);
       filesWritten.push(result);
-      sink.emit({
-        type: "compaction.file_written",
-        eventId,
-        sessionId,
-        file: result,
-        at: new Date().toISOString(),
-      });
+      try {
+        sink.emit({
+          type: "compaction.file_written",
+          eventId,
+          sessionId,
+          file: result,
+          at: new Date().toISOString(),
+        });
+      } catch {
+        /* best-effort: event sinks must not break compaction */
+      }
     }
 
     const completed_at = new Date().toISOString();

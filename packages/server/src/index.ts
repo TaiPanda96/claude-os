@@ -149,11 +149,34 @@ app.get("/sessions/:id/compaction-events", (c) => {
 // events here. We log + broadcast them; there is no persistence by design — the
 // compaction_events table remains the durable audit trail.
 app.post("/webhooks/compaction", async (c) => {
-  const event = (await c.req.json()) as CompactionLifecycleEvent;
-  if (!event?.type || !event.eventId || !event.sessionId) {
+  let body: unknown;
+  try {
+    body = await c.req.json();
+  } catch {
+    return c.json({ error: "invalid JSON" }, 400);
+  }
+
+  const event = body as Partial<CompactionLifecycleEvent>;
+  const allowedTypes = new Set<CompactionLifecycleEvent["type"]>([
+    "compaction.triggered",
+    "compaction.started",
+    "compaction.file_written",
+    "compaction.completed",
+    "compaction.failed",
+  ]);
+
+  if (
+    !event ||
+    typeof event.type !== "string" ||
+    !allowedTypes.has(event.type as CompactionLifecycleEvent["type"]) ||
+    typeof event.eventId !== "string" ||
+    typeof event.sessionId !== "string" ||
+    typeof event.at !== "string"
+  ) {
     return c.json({ error: "invalid lifecycle event" }, 400);
   }
-  publish(event);
+
+  publish(event as CompactionLifecycleEvent);
   return c.body(null, 202);
 });
 
@@ -162,15 +185,24 @@ app.post("/webhooks/compaction", async (c) => {
 app.get("/events", (c) =>
   streamSSE(c, async (stream) => {
     const unsubscribe = subscribe((event) => {
-      void stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+      void stream
+        .writeSSE({ event: event.type, data: JSON.stringify(event) })
+        .catch(() => {
+          /* ignore: client may have disconnected */
+        });
     });
+
     stream.onAbort(unsubscribe);
-    // Heartbeat keeps the connection from being reaped while idle; loop exits on abort.
-    while (!stream.aborted) {
-      await stream.writeSSE({ event: "ping", data: "{}" });
-      await stream.sleep(15_000);
+
+    try {
+      // Heartbeat keeps the connection from being reaped while idle; loop exits on abort.
+      while (!stream.aborted) {
+        await stream.writeSSE({ event: "ping", data: "{}" });
+        await stream.sleep(15_000);
+      }
+    } finally {
+      unsubscribe();
     }
-    unsubscribe();
   }),
 );
 

@@ -59,15 +59,19 @@ export function evaluateCompactionTriggers(
           // Mint the audit-record id here so `compaction.triggered` and the rest of the
           // lifecycle stream share one eventId; compaction() reuses it for its DB row.
           const eventId = uuidv4();
-          sink.emit({
-            type: "compaction.triggered",
-            eventId,
-            sessionId,
-            policyId: policy.id,
-            triggeredBy: trigger.triggerType,
-            detail,
-            at: new Date().toISOString(),
-          });
+          try {
+            sink.emit({
+              type: "compaction.triggered",
+              eventId,
+              sessionId,
+              policyId: policy.id,
+              triggeredBy: trigger.triggerType,
+              detail,
+              at: new Date().toISOString(),
+            });
+          } catch {
+            /* best-effort: event sinks must not break trigger evaluation */
+          }
           await compaction(
             db,
             sessionId,
