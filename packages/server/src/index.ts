@@ -162,15 +162,24 @@ app.post("/webhooks/compaction", async (c) => {
 app.get("/events", (c) =>
   streamSSE(c, async (stream) => {
     const unsubscribe = subscribe((event) => {
-      void stream.writeSSE({ event: event.type, data: JSON.stringify(event) });
+      void stream
+        .writeSSE({ event: event.type, data: JSON.stringify(event) })
+        .catch(() => {
+          /* ignore: client may have disconnected */
+        });
     });
+
     stream.onAbort(unsubscribe);
-    // Heartbeat keeps the connection from being reaped while idle; loop exits on abort.
-    while (!stream.aborted) {
-      await stream.writeSSE({ event: "ping", data: "{}" });
-      await stream.sleep(15_000);
+
+    try {
+      // Heartbeat keeps the connection from being reaped while idle; loop exits on abort.
+      while (!stream.aborted) {
+        await stream.writeSSE({ event: "ping", data: "{}" });
+        await stream.sleep(15_000);
+      }
+    } finally {
+      unsubscribe();
     }
-    unsubscribe();
   }),
 );
 
