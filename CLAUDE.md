@@ -31,6 +31,8 @@ Three TS packages + two apps around one SQLite file at repo root (gitignored). F
 
 DB path: `CLAUDE_OS_DB_PATH` env var, else repo-root `claude-os.sqlite`. `getDb()` is a singleton and runs migration on first call.
 
+**Migration pattern** (`packages/core/src/db/migrate.ts`): a `migrations` table tracks each applied migration by numeric id. On startup, `migrateDb` runs only the entries absent from that table — in order, each in its own transaction. To add a migration, append one entry to the `MIGRATIONS` array. No version counters, no if/else chains, no try/catch guards for pre-existing columns.
+
 ### Invariants worth not breaking
 
 - **Quality/health logic has one home each — don't re-inline it.** The per-turn quality formula lives in `packages/core/src/domain/quality-proxy.ts` (`qualityForTurn`); the session-level degradation stats (peak/inflection/trend/turnsToInflection) live in `packages/core/src/domain/session-trend.ts` (`computeSessionTrend`). Both `health.ts` (server) and `apps/desktop/src/renderer/quality.ts` (renderer) import from these — keep it that way so the two sides can't silently diverge across the wire.
