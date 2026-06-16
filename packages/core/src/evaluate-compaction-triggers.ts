@@ -1,8 +1,11 @@
+import { v4 as uuidv4 } from "uuid";
 import type { Database, Turn, TriggerConfig } from "./types.js";
 import { TriggerTypeEnum } from "./types.js";
 import { getPolicy, getLastCompactionEvent, getProject } from "./db.js";
 import { compaction } from "./compaction.js";
 import type { ClassifierPort, LlmPorts } from "./domain/llm-ports.js";
+import type { CompactionEventSink } from "./domain/compaction-lifecycle-event.js";
+import { noopEventSink } from "./domain/compaction-lifecycle-event.js";
 import { llmPortFactory } from "./infrastructure/anthropic-llm.js";
 import { checkTriggerGate } from "./check-trigger-gate.js";
 
@@ -30,6 +33,7 @@ export function evaluateCompactionTriggers(
   recentOutput: string,
   cwd: string,
   ports: LlmPorts = llmPortFactory(),
+  sink: CompactionEventSink = noopEventSink,
 ): void {
   // Run async without blocking the turn response
   (async () => {
@@ -44,23 +48,26 @@ export function evaluateCompactionTriggers(
       if (!policy || !policy.active) return;
 
       // Cooldown check
-      const sinceLastCompaction = turnsSinceLastCompaction(
-        db,
-        sessionId,
-        turn.turnIndex,
-      );
+      const sinceLastCompaction = turnsSinceLastCompaction(db, sessionId, turn.turnIndex);
 
       if (sinceLastCompaction < policy.cooldown_turns) return;
 
       for (const trigger of policy.triggers) {
-        const { fired, detail } = await checkTrigger(
-          trigger,
-          turn,
-          recentOutput,
-          ports.classifier,
-        );
+        const { fired, detail } = await checkTrigger(trigger, turn, recentOutput, ports.classifier);
         if (fired) {
           cooldownTracker.set(sessionId, 0);
+          // Mint the audit-record id here so `compaction.triggered` and the rest of the
+          // lifecycle stream share one eventId; compaction() reuses it for its DB row.
+          const eventId = uuidv4();
+          sink.emit({
+            type: "compaction.triggered",
+            eventId,
+            sessionId,
+            policyId: policy.id,
+            triggeredBy: trigger.triggerType,
+            detail,
+            at: new Date().toISOString(),
+          });
           await compaction(
             db,
             sessionId,
@@ -70,6 +77,8 @@ export function evaluateCompactionTriggers(
             turn.cumulativeTokens,
             cwd,
             ports.summarizer,
+            sink,
+            eventId,
           );
           return; // one compaction per turn
         }
@@ -139,12 +148,8 @@ async function checkTrigger(
 
     case TriggerTypeEnum.SEMANTIC_EVENT:
       if (checkTriggerGate(trigger, ctxPct, turnIndex)) {
-        const fired = await classifier.classify(
-          trigger.classifier,
-          recentOutput,
-        );
-        if (fired)
-          return { fired: true, detail: "semantic: custom classifier fired" };
+        const fired = await classifier.classify(trigger.classifier, recentOutput);
+        if (fired) return { fired: true, detail: "semantic: custom classifier fired" };
       }
       break;
 
@@ -168,27 +173,19 @@ async function checkTrigger(
           BUILT_IN_CLASSIFIERS[TriggerTypeEnum.OUTCOME_RESOLVED]!,
           recentOutput,
         );
-        if (fired)
-          return { fired: true, detail: "semantic: outcome resolved detected" };
+        if (fired) return { fired: true, detail: "semantic: outcome resolved detected" };
       }
       break;
 
     case TriggerTypeEnum.COMBINED: {
       if (trigger.mode === "any") {
         for (const sub of trigger.triggers) {
-          const result = await checkTrigger(
-            sub,
-            turn,
-            recentOutput,
-            classifier,
-          );
+          const result = await checkTrigger(sub, turn, recentOutput, classifier);
           if (result.fired) return result;
         }
       } else {
         const results = await Promise.all(
-          trigger.triggers.map((sub) =>
-            checkTrigger(sub, turn, recentOutput, classifier),
-          ),
+          trigger.triggers.map((sub) => checkTrigger(sub, turn, recentOutput, classifier)),
         );
         if (results.every((r) => r.fired))
           return {

@@ -1,11 +1,7 @@
 import { join } from "node:path";
 import { v4 as uuidv4 } from "uuid";
 import type { Database } from "./types.js";
-import type {
-  CompactionPolicy,
-  CompactionEvent,
-  CompactionFileResult,
-} from "./types.js";
+import type { CompactionPolicy, CompactionEvent, CompactionFileResult } from "./types.js";
 import { TriggerTypeEnum, type Turn } from "./types.js";
 import {
   insertCompactionEvent,
@@ -14,6 +10,8 @@ import {
   getSessionTurns,
 } from "./db.js";
 import type { SummarizerPort } from "./domain/llm-ports.js";
+import type { CompactionEventSink } from "./domain/compaction-lifecycle-event.js";
+import { noopEventSink } from "./domain/compaction-lifecycle-event.js";
 import { llmPortFactory } from "./infrastructure/anthropic-llm.js";
 import { memoryDir } from "./utils/memory-dir.js";
 import { ensureDir } from "./utils/ensure-dir-exists.js";
@@ -50,8 +48,11 @@ export async function compaction(
   tokensAtTrigger: number,
   cwd: string,
   summarizer: SummarizerPort = llmPortFactory().summarizer,
+  sink: CompactionEventSink = noopEventSink,
+  // Defaults to a fresh id for the manual/standalone path; the trigger evaluator passes
+  // the id it already emitted `compaction.triggered` with, so the whole stream correlates.
+  eventId: string = uuidv4(),
 ): Promise<CompactionEvent> {
-  const eventId = uuidv4();
   const now = new Date().toISOString();
 
   const event: CompactionEvent = {
@@ -69,14 +70,21 @@ export async function compaction(
   };
 
   insertCompactionEvent(db, event);
+  sink.emit({
+    type: "compaction.started",
+    eventId,
+    sessionId,
+    policyId: policy.id,
+    triggeredBy,
+    tokensAtTrigger,
+    at: now,
+  });
 
   try {
     const turns = getSessionTurns(db, sessionId);
     const lastEvent = getLastCompactionEvent(db, sessionId);
     const fromTurnIndex = lastEvent
-      ? turns.findIndex(
-          (t) => t.createdAt > new Date(lastEvent.completed_at!).getTime(),
-        )
+      ? turns.findIndex((t) => t.createdAt > new Date(lastEvent.completed_at!).getTime())
       : 0;
 
     const dir = memoryDir(cwd);
@@ -85,17 +93,11 @@ export async function compaction(
 
     for (const file of policy.memory_schema) {
       const maxTokens = file.max_tokens ?? MAX_TOKENS_DEFAULT;
-      const slice = assembleSliceToCompact(
-        turns,
-        Math.max(0, fromTurnIndex),
-        maxTokens,
-      );
+      const slice = assembleSliceToCompact(turns, Math.max(0, fromTurnIndex), maxTokens);
       if (!slice.text) continue;
       const filePath = join(dir, file.filename);
       const existingContent =
-        file.update_mode === "merge"
-          ? readDir(filePath, MERGE_EXISTING_CAP)
-          : "";
+        file.update_mode === "merge" ? readDir(filePath, MERGE_EXISTING_CAP) : "";
 
       const prompt = buildMemoryCompactionPrompt(file, slice, existingContent);
 
@@ -106,6 +108,13 @@ export async function compaction(
 
       const result = await writeMemoryFileToDir(dir, file, outputText);
       filesWritten.push(result);
+      sink.emit({
+        type: "compaction.file_written",
+        eventId,
+        sessionId,
+        file: result,
+        at: new Date().toISOString(),
+      });
     }
 
     const completed_at = new Date().toISOString();
@@ -113,6 +122,13 @@ export async function compaction(
       status: "completed",
       files_written: filesWritten,
       completed_at,
+    });
+    sink.emit({
+      type: "compaction.completed",
+      eventId,
+      sessionId,
+      filesWritten,
+      at: completed_at,
     });
     return {
       ...event,
@@ -128,6 +144,13 @@ export async function compaction(
       completed_at,
       error,
     });
+    sink.emit({
+      type: "compaction.failed",
+      eventId,
+      sessionId,
+      error,
+      at: completed_at,
+    });
     return { ...event, status: "failed", completed_at, error };
   }
 }
@@ -138,8 +161,7 @@ function assembleSliceToCompact(
   maxTokens: number,
 ): { text: string; start: number; end: number } {
   const slice = turns.filter((t) => t.turnIndex >= fromTurnIndex);
-  if (slice.length === 0)
-    return { text: "", start: fromTurnIndex, end: fromTurnIndex };
+  if (slice.length === 0) return { text: "", start: fromTurnIndex, end: fromTurnIndex };
 
   const parts: string[] = [];
   // Budget: 4 chars per token estimate, newest turns first to preserve recency
