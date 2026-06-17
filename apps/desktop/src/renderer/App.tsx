@@ -4,6 +4,8 @@ import { SessionList } from "./components/session-list.js";
 import { SessionTable } from "./components/session-table.js";
 import { DetailPanel } from "./components/detail-panel.js";
 import { PolicyPanel } from "./components/policy-panel.js";
+import { MemoryPanel } from "./components/memory-panel.js";
+import { CompactForkModal } from "./components/compact-fork-modal.js";
 import { SessionRow, SessionDetail, GCEvent, Project, SERVER } from "./types.js";
 import { tokens } from "./theme.js";
 
@@ -25,13 +27,15 @@ export function App() {
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [ttlDays, setTtlDays] = useState<number>(7);
-  const [view, setView] = useState<ViewMode>("project");
+  const [view, setView] = useState<ViewMode>("table");
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [gcEvents, setGcEvents] = useState<GCEvent[]>([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [memoryProjectId, setMemoryProjectId] = useState<string | null>(null);
+  const [compactForkSessionId, setCompactForkSessionId] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
 
@@ -106,6 +110,8 @@ export function App() {
 
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+  const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
+  const compactForkSession = sessions.find((s) => s.id === compactForkSessionId) ?? null;
   const sessionCount = sessions.length;
 
   if (error) {
@@ -113,7 +119,9 @@ export function App() {
       <div style={styles.error}>
         <div style={styles.errorIcon}>⚠</div>
         <div style={styles.errorText}>{error}</div>
-        <button style={styles.retryBtn} onClick={fetchSessions}>Retry</button>
+        <button style={styles.retryBtn} onClick={fetchSessions}>
+          Retry
+        </button>
       </div>
     );
   }
@@ -123,14 +131,29 @@ export function App() {
       {/* Title bar */}
       <div style={styles.titleBar}>
         <svg
-          width="16" height="16" viewBox="0 0 40 40" fill="none"
+          width="16"
+          height="16"
+          viewBox="0 0 40 40"
+          fill="none"
           xmlns="http://www.w3.org/2000/svg"
           style={{ flexShrink: 0, marginRight: 6 }}
           aria-hidden="true"
         >
           <rect width="40" height="40" rx="6" fill="#0D1117" />
-          <path d="M12 8 L9 8 L9 32 L12 32" stroke="#00C9A7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          <path d="M28 8 L31 8 L31 32 L28 32" stroke="#00C9A7" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          <path
+            d="M12 8 L9 8 L9 32 L12 32"
+            stroke="#00C9A7"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+          <path
+            d="M28 8 L31 8 L31 32 L28 32"
+            stroke="#00C9A7"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
           <circle cx="20" cy="14" r="2.5" fill="#00C9A7" />
           <circle cx="15" cy="22" r="1.8" fill="#00C9A7" opacity="0.65" />
           <circle cx="25" cy="22" r="1.8" fill="#00C9A7" opacity="0.65" />
@@ -183,16 +206,8 @@ export function App() {
           // SessionList (left nav) + SessionTable (detail) — the two redesigned
           // session views, mounted as the two-pane layout they were built for.
           <div style={styles.tablePane}>
-            <SessionList
-              sessions={sessions}
-              selected={selectedId}
-              onSelect={handleSelect}
-            />
-            <SessionTable
-              sessions={sessions}
-              selected={selectedId}
-              onSelect={handleSelect}
-            />
+            <SessionList sessions={sessions} selected={selectedId} onSelect={handleSelect} />
+            <SessionTable sessions={sessions} selected={selectedId} onSelect={handleSelect} />
           </div>
         ) : (
           <ProjectSessionTree
@@ -224,6 +239,32 @@ export function App() {
             projectId={selectedProjectId}
             projectName={selectedProject.name}
             onClose={() => setSelectedProjectId(null)}
+          />
+        )}
+
+        {memoryProjectId && memoryProject && (
+          <MemoryPanel
+            projectId={memoryProjectId}
+            projectName={memoryProject.name}
+            onClose={() => setMemoryProjectId(null)}
+          />
+        )}
+
+        {compactForkSessionId && compactForkSession && (
+          <CompactForkModal
+            sessionId={compactForkSessionId}
+            sessionName={compactForkSession.name}
+            model={compactForkSession.model}
+            ctxPct={compactForkSession.current_ctx_pct ?? 0}
+            ctxWindow={compactForkSession.ctx_window}
+            lastCompaction={
+              compactForkSessionId === selectedId ? (detail?.lastCompaction ?? null) : null
+            }
+            onDone={() => {
+              fetchSessions();
+              setCompactForkSessionId(null);
+            }}
+            onClose={() => setCompactForkSessionId(null)}
           />
         )}
       </div>

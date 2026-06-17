@@ -207,9 +207,9 @@ export function insertCompactionEvent(db: Database, e: CompactionEvent): void {
   db.prepare(
     `INSERT INTO compaction_events
      (id, session_id, policy_id, triggered_by, trigger_detail, files_written,
-      tokens_at_trigger, status, started_at, completed_at, error)
+      tokens_at_trigger, output_size_tokens, status, started_at, completed_at, error)
      VALUES ($id, $sessionId, $policyId, $triggeredBy, $triggerDetail, $filesWritten,
-             $tokensAtTrigger, $status, $startedAt, $completedAt, $error)`,
+             $tokensAtTrigger, $outputSizeTokens, $status, $startedAt, $completedAt, $error)`,
   ).run({
     $id: e.id,
     $sessionId: e.session_id,
@@ -218,6 +218,7 @@ export function insertCompactionEvent(db: Database, e: CompactionEvent): void {
     $triggerDetail: e.trigger_detail,
     $filesWritten: JSON.stringify(e.files_written),
     $tokensAtTrigger: e.tokens_at_trigger,
+    $outputSizeTokens: e.output_size_tokens,
     $status: e.status,
     $startedAt: e.started_at,
     $completedAt: e.completed_at ?? null,
@@ -231,6 +232,7 @@ export function updateCompactionEvent(
   patch: {
     status: "completed" | "failed";
     files_written?: CompactionFileResult[];
+    output_size_tokens?: number;
     completed_at: string;
     error?: string;
   },
@@ -238,12 +240,14 @@ export function updateCompactionEvent(
   db.prepare(
     `UPDATE compaction_events
      SET status = $status, files_written = $filesWritten,
+         output_size_tokens = $outputSizeTokens,
          completed_at = $completedAt, error = $error
      WHERE id = $id`,
   ).run({
     $id: id,
     $status: patch.status,
     $filesWritten: JSON.stringify(patch.files_written ?? []),
+    $outputSizeTokens: patch.output_size_tokens ?? 0,
     $completedAt: patch.completed_at,
     $error: patch.error ?? null,
   });
@@ -256,6 +260,22 @@ export function getCompactionEvents(db: Database, sessionId: string): Compaction
         `SELECT * FROM compaction_events WHERE session_id = $sessionId ORDER BY started_at DESC`,
       )
       .all({ $sessionId: sessionId }) as any[]
+  ).map(rowToCompactionEvent);
+}
+
+export function getCompactionEventsForProject(
+  db: Database,
+  projectId: string,
+): CompactionEvent[] {
+  return (
+    db
+      .prepare(
+        `SELECT ce.* FROM compaction_events ce
+         JOIN sessions s ON s.id = ce.session_id
+         WHERE s.project_id = $projectId AND ce.status = 'completed'
+         ORDER BY ce.started_at DESC`,
+      )
+      .all({ $projectId: projectId }) as any[]
   ).map(rowToCompactionEvent);
 }
 
@@ -320,8 +340,11 @@ function rowToCompactionEvent(r: any): CompactionEvent {
     policy_id: r.policy_id,
     triggered_by: r.triggered_by as TriggerTypeEnum,
     trigger_detail: r.trigger_detail,
-    files_written: JSON.parse(r.files_written) as CompactionFileResult[],
+    files_written: (JSON.parse(r.files_written) as Array<CompactionFileResult & { preview?: string }>).map(
+      (f) => ({ ...f, content: f.content ?? f.preview ?? "" }),
+    ),
     tokens_at_trigger: r.tokens_at_trigger,
+    output_size_tokens: r.output_size_tokens ?? 0,
     status: r.status,
     started_at: r.started_at,
     completed_at: r.completed_at ?? null,

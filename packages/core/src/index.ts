@@ -65,9 +65,13 @@ export {
   insertCompactionEvent,
   updateCompactionEvent,
   getCompactionEvents,
+  getCompactionEventsForProject,
   getLastCompactionEvent,
 } from "./db.js";
 export { compaction } from "./compaction.js";
+export { memoryDir, telemetryDir } from "./utils/memory-dir.js";
+export { writeTelemetryTurn } from "./utils/write-telemetry-turn.js";
+export type { TelemetryTurnRecord } from "./utils/write-telemetry-turn.js";
 export type {
   Project,
   CompactionPolicy,

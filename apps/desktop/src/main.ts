@@ -56,7 +56,7 @@ let serverProcess: ChildProcess | null = null;
 
 function startServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    serverProcess = spawn("bun", ["run", SERVER_ENTRY], {
+    serverProcess = spawn("bun", ["run", "--env-file", path.join(REPO_ROOT, ".env"), SERVER_ENTRY], {
       cwd: REPO_ROOT,
       stdio: ["ignore", "pipe", "pipe"],
       env: {
