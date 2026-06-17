@@ -1,13 +1,14 @@
 import { homedir } from "os";
-import { join } from "path";
+import { join, basename } from "path";
 
-/**
- *
- * @param cwd - change working directory (usually the project root) used to scope the memory files.
- * This is encoded and becomes part of the path, so different cwd will lead to different memory dirs.
- * @returns the path to the memory directory for the given cwd. Memory files live at ~/.claude/projects/{urlencoded-cwd}/claude-os/memory/
- */
+// Mirrors the convention Claude Code itself uses: ~/.claude/projects/<project-name>/
+// The project name is the basename of the cwd, matching how ingest resolves project names.
 export function memoryDir(cwd: string): string {
-  const encoded = encodeURIComponent(cwd).replace(/%2F/g, "-");
-  return join(homedir(), ".claude", "projects", encoded, "claude-os", "memory");
+  const projectName = basename(cwd) || "unknown";
+  return join(homedir(), ".claude", "projects", projectName, "memory");
+}
+
+// Telemetry subfolder — one JSON file per turn, keyed by a random UUID.
+export function telemetryDir(cwd: string): string {
+  return join(memoryDir(cwd), "telemetry");
 }

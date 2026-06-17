@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { v4 as uuidv4 } from "uuid";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import {
   getDb,
   getSession,
@@ -10,10 +11,15 @@ import {
   getPolicy,
   upsertPolicy,
   getCompactionEvents,
+  getCompactionEventsForProject,
+  getLastCompactionEvent,
+  upsertSession,
   compaction,
   TriggerTypeEnum,
   computeCostUsd,
   getPricing,
+  getProject,
+  memoryDir,
 } from "@claude-os/core";
 import type { CompactionPolicy, CompactionLifecycleEvent } from "@claude-os/core";
 import { publish, subscribe, inProcessEventSink } from "./compaction-event-bus.js";
@@ -84,7 +90,13 @@ app.get("/sessions/:id", (c) => {
   const session = getSession(db, c.req.param("id"));
   if (!session) return c.json({ error: "not found" }, 404);
   const turns = getSessionTurns(db, session.id);
-  return c.json({ session, turns });
+  const forks = (
+    db
+      .prepare(`SELECT id FROM sessions WHERE forked_from = $parentId`)
+      .all({ $parentId: session.id }) as { id: string }[]
+  ).map((r) => r.id);
+  const lastCompaction = getLastCompactionEvent(db, session.id);
+  return c.json({ session, turns, forks, lastCompaction: lastCompaction ?? null });
 });
 
 app.get("/sessions/:id/health", (c) => {
@@ -204,6 +216,39 @@ app.get("/spend/sessions", (c) => {
   return c.json(annotated);
 });
 
+// ── Memory artifacts ──────────────────────────────────────────────────────────
+
+app.get("/projects/:id/memory", (c) => {
+  const db = getDb();
+  const project = getProject(db, c.req.param("id"));
+  if (!project) return c.json({ error: "project not found" }, 404);
+
+  const dir = memoryDir(project.cwd);
+  if (!existsSync(dir)) return c.json({ files: [] });
+
+  let filenames: string[];
+  try {
+    filenames = readdirSync(dir).filter((f) => !f.startsWith("."));
+  } catch {
+    return c.json({ files: [] });
+  }
+
+  const files = filenames.map((filename) => {
+    const path = `${dir}/${filename}`;
+    const stat = statSync(path);
+    const content = readFileSync(path, "utf-8");
+    return { filename, bytes: stat.size, modified_at: stat.mtimeMs, content };
+  });
+
+  return c.json({ files, dir });
+});
+
+app.get("/projects/:id/compaction-events", (c) => {
+  const db = getDb();
+  const events = getCompactionEventsForProject(db, c.req.param("id"));
+  return c.json(events);
+});
+
 // ── Policy management ─────────────────────────────────────────────────────────
 
 app.get("/projects/:id/policy", (c) => {
@@ -318,6 +363,9 @@ app.post("/sessions/:id/compact", async (c) => {
   if (!policy || !policy.active)
     return c.json({ error: "no active policy for this project" }, 400);
 
+  const project = getProject(db, session.projectId);
+  if (!project) return c.json({ error: "project not found" }, 404);
+
   const turns = getSessionTurns(db, sessionId);
   const lastTurn = turns[turns.length - 1];
   if (!turns.length || !lastTurn)
@@ -332,7 +380,7 @@ app.post("/sessions/:id/compact", async (c) => {
     TriggerTypeEnum.MANUAL,
     "manual compaction",
     lastTurn.cumulativeTokens,
-    (session as any).cwd ?? "",
+    project.cwd,
     undefined,
     inProcessEventSink,
   );
@@ -345,6 +393,37 @@ app.post("/sessions/:id/compact", async (c) => {
     session_id: sessionId,
     policy_id: policy.id,
   });
+});
+
+app.post("/sessions/:id/fork", async (c) => {
+  const db = getDb();
+  const parentId = c.req.param("id");
+  const parent = getSession(db, parentId);
+  if (!parent) return c.json({ error: "session not found" }, 404);
+
+  let body: { name?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    /* body is optional */
+  }
+
+  const now = Date.now();
+  const child = {
+    id: uuidv4(),
+    name: body.name ?? (parent.name ? `${parent.name} (fork)` : null),
+    model: parent.model,
+    ctxWindow: parent.ctxWindow,
+    createdAt: now,
+    lastActiveAt: now,
+    status: "active" as const,
+    outcomeStatus: "unresolved" as const,
+    forkedFrom: parentId,
+    projectId: parent.projectId,
+  };
+
+  upsertSession(db, child);
+  return c.json({ id: child.id, name: child.name, forked_from: parentId }, 201);
 });
 
 // Bind to loopback only — this API is unauthenticated and serves full session

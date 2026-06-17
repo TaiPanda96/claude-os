@@ -20,8 +20,9 @@ export function subscribe(fn: Subscriber): () => void {
 }
 
 export function publish(event: CompactionLifecycleEvent): void {
+  const suffix = event.type === "compaction.failed" ? ` error=${event.error}` : "";
   console.log(
-    `[compaction-event] ${event.type} session=${event.sessionId} event=${event.eventId}`,
+    `[compaction-event] ${event.type} session=${event.sessionId} event=${event.eventId}${suffix}`,
   );
   for (const fn of subscribers) {
     try {

@@ -23,6 +23,6 @@ export async function writeMemoryFileToDir(
     filename: file.filename,
     update_mode: file.update_mode,
     bytes_written: bytes,
-    preview: content.slice(0, 200),
+    content,
   };
 }

@@ -10,6 +10,7 @@ export interface SessionRow {
   // Project topology — present when server JOINs projects table
   project_id: string | null;
   project_name: string | null;
+  forked_from: string | null;
 }
 
 export interface Project {
@@ -87,14 +88,50 @@ export interface GCEvent {
   created_at: number;
 }
 
+export interface MemoryFileResult {
+  filename: string;
+  bytes_written: number;
+  content: string;
+  update_mode: string;
+}
+
+export interface CompactionEventDetail {
+  id: string;
+  tokens_at_trigger: number;
+  output_size_tokens: number;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  files_written: MemoryFileResult[];
+}
+
+// Kept for the savings-preview path (only needs token counts)
+export interface CompactionEventSummary {
+  id: string;
+  tokens_at_trigger: number;
+  output_size_tokens: number;
+  status: string;
+  completed_at: string | null;
+}
+
+export interface MemoryArtifact {
+  filename: string;
+  bytes: number;
+  modified_at: number;
+  content: string;
+}
+
 export interface SessionDetail {
   session: {
     id: string;
     name: string | null;
     model: string;
     ctxWindow: number;
+    forkedFrom: string | null;
   };
   turns: Turn[];
+  forks: string[];
+  lastCompaction: CompactionEventSummary | null;
 }
 
 export type GCState = "clean" | "soft_gc" | "hard_gc";
@@ -120,3 +157,10 @@ export const GC_TEXT: Record<GCState, string> = {
 };
 
 export const SERVER = "http://localhost:7842";
+
+// Model pricing for client-side savings estimates — mirrors packages/core/src/pricing.ts
+export const MODEL_PRICING: Record<string, { inputPerM: number }> = {
+  "claude-sonnet-4-6":        { inputPerM: 3.0 },
+  "claude-haiku-4-5-20251001": { inputPerM: 0.8 },
+  "claude-opus-4-8":          { inputPerM: 15.0 },
+};

@@ -5,7 +5,7 @@
   "description": "Local Hono server — serves session data at localhost:7842.",
   "type": "module",
   "scripts": {
-    "dev": "bun run --watch src/index.ts",
+    "dev": "bun run --env-file ../../.env --watch src/index.ts",
     "build": "bun build src/index.ts --outdir dist --target node",
     "typecheck": "tsc --noEmit"
   },

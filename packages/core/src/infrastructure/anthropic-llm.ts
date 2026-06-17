@@ -1,9 +1,13 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type {
-  ClassifierPort,
-  SummarizerPort,
-  LlmPorts,
-} from "../domain/llm-ports.js";
+import dotenv from "dotenv";
+import { resolve, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+// Resolve repo root from packages/core/src/infrastructure/ (4 levels up) so the
+// key is found regardless of whether the caller's cwd is the repo root, a package
+// subdir, or an Electron main process spawned from somewhere else entirely.
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
+dotenv.config({ path: resolve(REPO_ROOT, ".env") });
+import type { ClassifierPort, SummarizerPort, LlmPorts } from "../domain/llm-ports.js";
 import { extractText } from "../utils/extract-text.js";
 
 export enum TypeOfWork {
@@ -41,7 +45,12 @@ export class AnthropicLlm implements ClassifierPort, SummarizerPort {
   }
 
   private getClient(): Anthropic {
-    if (!this.client) this.client = new Anthropic();
+    if (process.env.ANTHROPIC_API_KEY === undefined) {
+      throw new Error(
+        "Anthropic API key not found. Please set the ANTHROPIC_API_KEY environment variable.",
+      );
+    }
+    if (!this.client) this.client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
     return this.client;
   }
 
@@ -58,19 +67,13 @@ export class AnthropicLlm implements ClassifierPort, SummarizerPort {
           },
         ],
       });
-      return extractText(response.content)
-        .toLowerCase()
-        .trim()
-        .startsWith("yes");
+      return extractText(response.content).toLowerCase().trim().startsWith("yes");
     } catch {
       return false;
     }
   }
 
-  async summarize(
-    prompt: string,
-    opts: { merge: boolean; maxTokens: number },
-  ): Promise<string> {
+  async summarize(prompt: string, opts: { merge: boolean; maxTokens: number }): Promise<string> {
     const response = await this.getClient().messages.create({
       model: opts.merge
         ? modelForWork[TypeOfWork.MERGE_MODEL]

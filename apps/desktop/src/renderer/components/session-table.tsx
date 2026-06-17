@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { SessionRow, GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
-import { tokens } from "../theme.js";
+import { tokens, gc } from "../theme.js";
 
 type SortKey = "name" | "model" | "current_ctx_pct" | "turn_count" | "gc_state";
 type SortDir = "asc" | "desc";
@@ -9,6 +9,7 @@ interface Props {
   sessions: SessionRow[];
   selected: string | null;
   onSelect: (id: string) => void;
+  onCompactFork?: (id: string) => void;
 }
 
 const GC_LABEL: Record<GCState, string> = {
@@ -17,9 +18,10 @@ const GC_LABEL: Record<GCState, string> = {
   hard_gc: "Hard GC",
 };
 
-export function SessionTable({ sessions, selected, onSelect }: Props) {
+export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("current_ctx_pct");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -100,6 +102,9 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
 
             const rowClass = isHardGC ? "gc-row--hard_gc" : undefined;
 
+            const isHovered = hoveredId === s.id;
+            const canFork = state === "soft_gc" || state === "hard_gc";
+
             return (
               <tr
                 key={s.id}
@@ -109,6 +114,8 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                   ...(isSelected && !isHardGC ? styles.rowSelected : {}),
                 }}
                 onClick={() => onSelect(s.id)}
+                onMouseEnter={() => setHoveredId(s.id)}
+                onMouseLeave={() => setHoveredId(null)}
               >
                 {/* Session name */}
                 <td style={styles.td}>
@@ -123,6 +130,11 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                       {s.name ?? "unnamed"}
                     </span>
                     <span style={styles.sessionId}>{s.id.slice(0, 6)}</span>
+                    {s.forked_from && (
+                      <span style={styles.forkBadge} title={`Forked from ${s.forked_from.slice(0, 8)}`}>
+                        ⑂ {s.forked_from.slice(0, 6)}
+                      </span>
+                    )}
                   </div>
                 </td>
 
@@ -184,12 +196,24 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                   <span style={styles.mono}>{s.turn_count}</span>
                 </td>
 
-                {/* GC State chip */}
+                {/* GC State chip / Compact & Fork button on hover */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span className={`gc-chip gc-chip--${state}`}>
-                    <span className={`gc-dot gc-dot--${state}`} />
-                    {GC_LABEL[state]}
-                  </span>
+                  {isHovered && canFork && onCompactFork ? (
+                    <button
+                      style={styles.compactForkBtn}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onCompactFork(s.id);
+                      }}
+                    >
+                      ⑂ Compact &amp; Fork
+                    </button>
+                  ) : (
+                    <span className={`gc-chip gc-chip--${state}`}>
+                      <span className={`gc-dot gc-dot--${state}`} />
+                      {GC_LABEL[state]}
+                    </span>
+                  )}
                 </td>
               </tr>
             );
@@ -303,5 +327,27 @@ const styles: Record<string, React.CSSProperties> = {
     color: tokens.muted,
     fontSize: tokens.fsBody,
     fontFamily: tokens.fontMono,
+  },
+  forkBadge: {
+    fontSize: tokens.fsMicro,
+    color: gc.soft_gc.text,
+    fontFamily: tokens.fontMono,
+    background: gc.soft_gc.bg,
+    border: `1px solid ${gc.soft_gc.border}`,
+    borderRadius: tokens.radiusPill,
+    padding: "1px 6px",
+    flexShrink: 0,
+  },
+  compactForkBtn: {
+    background: gc.soft_gc.bg,
+    border: `1px solid ${gc.soft_gc.border}`,
+    borderRadius: tokens.radiusSm,
+    color: gc.soft_gc.text,
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
+    cursor: "pointer",
+    padding: "3px 8px",
+    fontWeight: 600,
+    letterSpacing: "0.02em",
   },
 };

@@ -13,6 +13,7 @@ import { computeGCState, MODEL_CONTEXT_WINDOWS } from "./types.js";
 import { evaluateCompactionTriggers } from "./evaluate-compaction-triggers.js";
 import type { Session, GCState } from "./types.js";
 import { computeTurnMetrics, recordTurn } from "./ingest/record-turn.js";
+import { writeTelemetryTurn } from "./utils/write-telemetry-turn.js";
 import { LlmPorts } from "./index.js";
 import type { CompactionEventSink } from "./domain/compaction-lifecycle-event.js";
 
@@ -123,6 +124,37 @@ export function createInstrumentedClient(
 
     const { gcState, gcTransitioned } = recordTurn(db, turn, lastGCState);
     updateSessionLastActive(db, sessionId);
+
+    // Write per-turn telemetry to disk (best-effort — never blocks the response)
+    try {
+      const cwd = options.cwd ?? process.cwd();
+      const lastMsg = params.messages[params.messages.length - 1];
+      const userText =
+        typeof lastMsg?.content === "string"
+          ? lastMsg.content
+          : Array.isArray(lastMsg?.content)
+            ? lastMsg.content
+                .filter((b): b is { type: "text"; text: string } => b.type === "text")
+                .map((b) => b.text)
+                .join("\n")
+            : null;
+      writeTelemetryTurn(cwd, {
+        session_id: sessionId,
+        turn_index: turn.turnIndex,
+        cwd,
+        timestamp: new Date().toISOString(),
+        input_tokens: input_tokens,
+        output_tokens: output_tokens,
+        cumulative_tokens: turn.cumulativeTokens,
+        ctx_pct: turn.ctxPct,
+        model,
+        stop_reason: response.stop_reason ?? null,
+        user_text: userText ?? null,
+        assistant_text: outputText || null,
+      });
+    } catch {
+      /* best-effort: telemetry must never break the response */
+    }
 
     evaluateCompactionTriggers(
       db,
