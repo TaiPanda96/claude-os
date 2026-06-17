@@ -159,6 +159,26 @@ export function migrateDb(db: Database): void {
     )
   `);
 
+  // Bridge from the pre-ledger scheme: older databases were versioned with
+  // `PRAGMA user_version` (1:1 with these migration ids) and already carry the
+  // effects of migrations 1..user_version, but have no ledger rows. Without this
+  // backfill the runner replays already-applied DDL — e.g.
+  // `ALTER TABLE sessions ADD COLUMN project_id` throws "duplicate column name".
+  // INSERT OR IGNORE makes this idempotent and a no-op for fresh DBs (version 0).
+  const legacyVersion = (
+    db.query(`PRAGMA user_version`).get() as { user_version: number }
+  ).user_version;
+  if (legacyVersion > 0) {
+    const backfill = db.prepare(
+      `INSERT OR IGNORE INTO migrations (id, name, applied_at) VALUES (?, ?, ?)`,
+    );
+    for (const migration of MIGRATIONS) {
+      if (migration.id <= legacyVersion) {
+        backfill.run(migration.id, migration.name, Date.now());
+      }
+    }
+  }
+
   const applied = new Set(
     (db.prepare(`SELECT id FROM migrations`).all() as { id: number }[]).map((r) => r.id),
   );
