@@ -69,7 +69,7 @@ export {
   getLastCompactionEvent,
 } from "./db.js";
 export { compaction } from "./compaction.js";
-export { memoryDir } from "./utils/memory-dir.js";
+export { memoryDir, telemetryDir } from "./utils/memory-dir.js";
 export type {
   Project,
   CompactionPolicy,

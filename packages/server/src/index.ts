@@ -363,6 +363,9 @@ app.post("/sessions/:id/compact", async (c) => {
   if (!policy || !policy.active)
     return c.json({ error: "no active policy for this project" }, 400);
 
+  const project = getProject(db, session.projectId);
+  if (!project) return c.json({ error: "project not found" }, 404);
+
   const turns = getSessionTurns(db, sessionId);
   const lastTurn = turns[turns.length - 1];
   if (!turns.length || !lastTurn)
@@ -377,7 +380,7 @@ app.post("/sessions/:id/compact", async (c) => {
     TriggerTypeEnum.MANUAL,
     "manual compaction",
     lastTurn.cumulativeTokens,
-    (session as any).cwd ?? "",
+    project.cwd,
     undefined,
     inProcessEventSink,
   );
