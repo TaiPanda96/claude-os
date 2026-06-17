@@ -148,6 +148,15 @@ const MIGRATIONS: Migration[] = [
       db.run(`ALTER TABLE turns ADD COLUMN pricing_version TEXT NOT NULL DEFAULT ''`);
     },
   },
+  {
+    id: 4,
+    name: "v4_compaction_output_size",
+    run(db) {
+      db.run(
+        `ALTER TABLE compaction_events ADD COLUMN output_size_tokens INTEGER NOT NULL DEFAULT 0`,
+      );
+    },
+  },
 ];
 
 export function migrateDb(db: Database): void {

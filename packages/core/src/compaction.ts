@@ -63,6 +63,7 @@ export async function compaction(
     trigger_detail: triggerDetail,
     files_written: [],
     tokens_at_trigger: tokensAtTrigger,
+    output_size_tokens: 0,
     status: "running",
     started_at: now,
     completed_at: null,
@@ -125,9 +126,14 @@ export async function compaction(
     }
 
     const completed_at = new Date().toISOString();
+    const outputSizeTokens = filesWritten.reduce(
+      (sum, f) => sum + Math.round(f.bytes_written / 4),
+      0,
+    );
     updateCompactionEvent(db, eventId, {
       status: "completed",
       files_written: filesWritten,
+      output_size_tokens: outputSizeTokens,
       completed_at,
     });
     sink.emit({
@@ -141,6 +147,7 @@ export async function compaction(
       ...event,
       status: "completed",
       files_written: filesWritten,
+      output_size_tokens: outputSizeTokens,
       completed_at,
     };
   } catch (err) {

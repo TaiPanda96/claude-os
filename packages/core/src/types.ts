@@ -226,6 +226,7 @@ export interface CompactionEvent {
   trigger_detail: string;
   files_written: CompactionFileResult[];
   tokens_at_trigger: number;
+  output_size_tokens: number;
   status: CompactionStatus;
   started_at: string;
   completed_at: string | null;

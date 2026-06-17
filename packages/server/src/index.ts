@@ -10,6 +10,8 @@ import {
   getPolicy,
   upsertPolicy,
   getCompactionEvents,
+  getLastCompactionEvent,
+  upsertSession,
   compaction,
   TriggerTypeEnum,
   computeCostUsd,
@@ -84,7 +86,13 @@ app.get("/sessions/:id", (c) => {
   const session = getSession(db, c.req.param("id"));
   if (!session) return c.json({ error: "not found" }, 404);
   const turns = getSessionTurns(db, session.id);
-  return c.json({ session, turns });
+  const forks = (
+    db
+      .prepare(`SELECT id FROM sessions WHERE forked_from = $parentId`)
+      .all({ $parentId: session.id }) as { id: string }[]
+  ).map((r) => r.id);
+  const lastCompaction = getLastCompactionEvent(db, session.id);
+  return c.json({ session, turns, forks, lastCompaction: lastCompaction ?? null });
 });
 
 app.get("/sessions/:id/health", (c) => {
@@ -345,6 +353,37 @@ app.post("/sessions/:id/compact", async (c) => {
     session_id: sessionId,
     policy_id: policy.id,
   });
+});
+
+app.post("/sessions/:id/fork", async (c) => {
+  const db = getDb();
+  const parentId = c.req.param("id");
+  const parent = getSession(db, parentId);
+  if (!parent) return c.json({ error: "session not found" }, 404);
+
+  let body: { name?: string } = {};
+  try {
+    body = await c.req.json();
+  } catch {
+    /* body is optional */
+  }
+
+  const now = Date.now();
+  const child = {
+    id: uuidv4(),
+    name: body.name ?? (parent.name ? `${parent.name} (fork)` : null),
+    model: parent.model,
+    ctxWindow: parent.ctxWindow,
+    createdAt: now,
+    lastActiveAt: now,
+    status: "active" as const,
+    outcomeStatus: "unresolved" as const,
+    forkedFrom: parentId,
+    projectId: parent.projectId,
+  };
+
+  upsertSession(db, child);
+  return c.json({ id: child.id, name: child.name, forked_from: parentId }, 201);
 });
 
 // Bind to loopback only — this API is unauthenticated and serves full session

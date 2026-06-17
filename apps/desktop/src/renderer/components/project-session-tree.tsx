@@ -12,6 +12,7 @@ interface Props {
   selected: string | null;
   onSelect: (id: string) => void;
   onSelectProject: (projectId: string) => void;
+  onCompactFork?: (id: string) => void;
 }
 
 interface ProjectGroup {
@@ -57,6 +58,7 @@ export function ProjectSessionTree({
   selected,
   onSelect,
   onSelectProject,
+  onCompactFork,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [showStale, setShowStale] = useState<Set<string>>(new Set());
@@ -98,6 +100,7 @@ export function ProjectSessionTree({
             session={s}
             isSelected={s.id === selected}
             onSelect={onSelect}
+            {...(onCompactFork ? { onCompactFork } : {})}
             showProject
           />
         ))}
@@ -124,6 +127,7 @@ export function ProjectSessionTree({
               session={s}
               isSelected={s.id === selected}
               onSelect={onSelect}
+              {...(onCompactFork ? { onCompactFork } : {})}
               showProject
               dimmed
             />
@@ -232,6 +236,7 @@ export function ProjectSessionTree({
                     session={s}
                     isSelected={s.id === selected}
                     onSelect={onSelect}
+                    {...(onCompactFork ? { onCompactFork } : {})}
                   />
                 ))}
 
@@ -257,6 +262,7 @@ export function ProjectSessionTree({
                       session={s}
                       isSelected={s.id === selected}
                       onSelect={onSelect}
+                      {...(onCompactFork ? { onCompactFork } : {})}
                       dimmed
                     />
                   ))}
@@ -319,18 +325,22 @@ function SessionRowComponent({
   session: s,
   isSelected,
   onSelect,
+  onCompactFork,
   showProject = false,
   dimmed = false,
 }: {
   session: SessionRow;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  onCompactFork?: (id: string) => void;
   showProject?: boolean;
   dimmed?: boolean;
 }) {
+  const [hovered, setHovered] = React.useState(false);
   const pct = s.current_ctx_pct ?? 0;
   const state = gcState(pct);
   const gcColors = gc[state];
+  const canFork = state === "soft_gc" || state === "hard_gc";
 
   return (
     <div
@@ -340,6 +350,8 @@ function SessionRowComponent({
         opacity: dimmed ? 0.45 : 1,
       }}
       onClick={() => onSelect(s.id)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
     >
       {/* Indent + dot */}
       <div style={styles.sessionLeft}>
@@ -357,6 +369,11 @@ function SessionRowComponent({
           <span style={styles.projectTag}>{s.project_name ?? "Ungrouped"}</span>
         )}
         <span style={styles.sessionId}>{s.id.slice(0, 6)}</span>
+        {s.forked_from && (
+          <span style={styles.forkBadge} title={`Forked from ${s.forked_from.slice(0, 8)}`}>
+            ⑂
+          </span>
+        )}
       </div>
 
       {/* Context bar */}
@@ -386,17 +403,29 @@ function SessionRowComponent({
         {(Math.min(pct, 1) * 100).toFixed(0)}%
       </span>
 
-      {/* GC chip */}
-      <span
-        style={{
-          ...styles.gcChip,
-          color: gcColors.text,
-          background: gcColors.bg,
-          border: `0.5px solid ${gcColors.border}`,
-        }}
-      >
-        {GC_LABEL[state]}
-      </span>
+      {/* GC chip / Compact & Fork button on hover */}
+      {hovered && canFork && onCompactFork ? (
+        <button
+          style={styles.compactForkBtn}
+          onClick={(e) => {
+            e.stopPropagation();
+            onCompactFork(s.id);
+          }}
+        >
+          ⑂ Fork
+        </button>
+      ) : (
+        <span
+          style={{
+            ...styles.gcChip,
+            color: gcColors.text,
+            background: gcColors.bg,
+            border: `0.5px solid ${gcColors.border}`,
+          }}
+        >
+          {GC_LABEL[state]}
+        </span>
+      )}
 
       {/* Last active */}
       <span style={styles.time}>{relativeTime(s.last_active_at)}</span>
@@ -692,5 +721,25 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     textAlign: "left" as const,
     letterSpacing: "0.04em",
+  },
+  forkBadge: {
+    fontSize: tokens.fsMicro,
+    color: gc.soft_gc.text,
+    fontFamily: tokens.fontMono,
+    opacity: 0.8,
+    flexShrink: 0,
+  },
+  compactForkBtn: {
+    background: gc.soft_gc.bg,
+    border: `1px solid ${gc.soft_gc.border}`,
+    borderRadius: tokens.radiusSm,
+    color: gc.soft_gc.text,
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
+    cursor: "pointer",
+    padding: "2px 7px",
+    fontWeight: 600,
+    letterSpacing: "0.02em",
+    flexShrink: 0,
   },
 };
