@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from "react";
 import { ProjectSessionTree } from "./components/project-session-tree.js";
 import { DetailPanel } from "./components/detail-panel.js";
 import { PolicyPanel } from "./components/policy-panel.js";
+import { MemoryPanel } from "./components/memory-panel.js";
 import { CompactForkModal } from "./components/compact-fork-modal.js";
 import { SessionRow, SessionDetail, GCEvent, Project, SERVER } from "./types.js";
 import { tokens } from "./theme.js";
@@ -30,6 +31,7 @@ export function App() {
   const [gcEvents, setGcEvents] = useState<GCEvent[]>([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [memoryProjectId, setMemoryProjectId] = useState<string | null>(null);
   const [compactForkSessionId, setCompactForkSessionId] = useState<string | null>(null);
 
   const [error, setError] = useState<string | null>(null);
@@ -105,6 +107,7 @@ export function App() {
 
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
   const selectedProject = projects.find((p) => p.id === selectedProjectId) ?? null;
+  const memoryProject = projects.find((p) => p.id === memoryProjectId) ?? null;
   const compactForkSession = sessions.find((s) => s.id === compactForkSessionId) ?? null;
   const sessionCount = sessions.length;
 
@@ -187,6 +190,7 @@ export function App() {
           selected={selectedId}
           onSelect={handleSelect}
           onSelectProject={handleSelectProject}
+          onViewMemory={(id) => setMemoryProjectId((prev) => (prev === id ? null : id))}
           onCompactFork={(id) => setCompactForkSessionId(id)}
         />
 
@@ -208,6 +212,14 @@ export function App() {
             projectId={selectedProjectId}
             projectName={selectedProject.name}
             onClose={() => setSelectedProjectId(null)}
+          />
+        )}
+
+        {memoryProjectId && memoryProject && (
+          <MemoryPanel
+            projectId={memoryProjectId}
+            projectName={memoryProject.name}
+            onClose={() => setMemoryProjectId(null)}
           />
         )}
 

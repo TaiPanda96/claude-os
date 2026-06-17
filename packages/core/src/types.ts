@@ -215,7 +215,7 @@ export interface CompactionFileResult {
   filename: string;
   update_mode: UpdateMode;
   bytes_written: number;
-  preview: string; // first 200 chars
+  content: string; // full written content
 }
 
 export interface CompactionEvent {

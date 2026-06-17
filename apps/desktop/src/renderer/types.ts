@@ -88,12 +88,37 @@ export interface GCEvent {
   created_at: number;
 }
 
+export interface MemoryFileResult {
+  filename: string;
+  bytes_written: number;
+  content: string;
+  update_mode: string;
+}
+
+export interface CompactionEventDetail {
+  id: string;
+  tokens_at_trigger: number;
+  output_size_tokens: number;
+  status: string;
+  started_at: string;
+  completed_at: string | null;
+  files_written: MemoryFileResult[];
+}
+
+// Kept for the savings-preview path (only needs token counts)
 export interface CompactionEventSummary {
   id: string;
   tokens_at_trigger: number;
   output_size_tokens: number;
   status: string;
   completed_at: string | null;
+}
+
+export interface MemoryArtifact {
+  filename: string;
+  bytes: number;
+  modified_at: number;
+  content: string;
 }
 
 export interface SessionDetail {

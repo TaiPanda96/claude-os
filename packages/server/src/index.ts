@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { streamSSE } from "hono/streaming";
 import { v4 as uuidv4 } from "uuid";
+import { readdirSync, readFileSync, statSync, existsSync } from "node:fs";
 import {
   getDb,
   getSession,
@@ -10,12 +11,15 @@ import {
   getPolicy,
   upsertPolicy,
   getCompactionEvents,
+  getCompactionEventsForProject,
   getLastCompactionEvent,
   upsertSession,
   compaction,
   TriggerTypeEnum,
   computeCostUsd,
   getPricing,
+  getProject,
+  memoryDir,
 } from "@claude-os/core";
 import type { CompactionPolicy, CompactionLifecycleEvent } from "@claude-os/core";
 import { publish, subscribe, inProcessEventSink } from "./compaction-event-bus.js";
@@ -210,6 +214,39 @@ app.get("/spend/sessions", (c) => {
   });
 
   return c.json(annotated);
+});
+
+// ── Memory artifacts ──────────────────────────────────────────────────────────
+
+app.get("/projects/:id/memory", (c) => {
+  const db = getDb();
+  const project = getProject(db, c.req.param("id"));
+  if (!project) return c.json({ error: "project not found" }, 404);
+
+  const dir = memoryDir(project.cwd);
+  if (!existsSync(dir)) return c.json({ files: [] });
+
+  let filenames: string[];
+  try {
+    filenames = readdirSync(dir).filter((f) => !f.startsWith("."));
+  } catch {
+    return c.json({ files: [] });
+  }
+
+  const files = filenames.map((filename) => {
+    const path = `${dir}/${filename}`;
+    const stat = statSync(path);
+    const content = readFileSync(path, "utf-8");
+    return { filename, bytes: stat.size, modified_at: stat.mtimeMs, content };
+  });
+
+  return c.json({ files, dir });
+});
+
+app.get("/projects/:id/compaction-events", (c) => {
+  const db = getDb();
+  const events = getCompactionEventsForProject(db, c.req.param("id"));
+  return c.json(events);
 });
 
 // ── Policy management ─────────────────────────────────────────────────────────

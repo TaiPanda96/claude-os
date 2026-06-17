@@ -12,6 +12,7 @@ interface Props {
   selected: string | null;
   onSelect: (id: string) => void;
   onSelectProject: (projectId: string) => void;
+  onViewMemory?: (projectId: string) => void;
   onCompactFork?: (id: string) => void;
 }
 
@@ -58,6 +59,7 @@ export function ProjectSessionTree({
   selected,
   onSelect,
   onSelectProject,
+  onViewMemory,
   onCompactFork,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -221,10 +223,24 @@ export function ProjectSessionTree({
 
             {/* Policy banner — project-level, always visible (distinct from sessions) */}
             {group.id && project && (
-              <PolicyBanner
-                project={project}
-                onEdit={() => onSelectProject(group.id!)}
-              />
+              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
+                <PolicyBanner
+                  project={project}
+                  onEdit={() => onSelectProject(group.id!)}
+                />
+                {onViewMemory && (
+                  <button
+                    style={styles.memoryBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onViewMemory(group.id!);
+                    }}
+                    title="View memory artifacts"
+                  >
+                    ◈ Memory
+                  </button>
+                )}
+              </div>
             )}
 
             {/* Session rows */}
@@ -526,10 +542,23 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "7px 20px 7px 0",
+    padding: "7px 0 7px 0",
     background: tokens.void,
     borderBottom: `0.5px solid ${tokens.surface1}`,
     minHeight: 34,
+    flex: 1,
+  },
+  memoryBtn: {
+    background: "transparent",
+    border: `0.5px solid ${tokens.border}`,
+    borderRadius: 3,
+    color: tokens.muted,
+    cursor: "pointer",
+    fontSize: tokens.fsMicro,
+    fontFamily: tokens.fontMono,
+    padding: "2px 6px",
+    flexShrink: 0,
+    marginRight: 12,
   },
   policyStatusDot: {
     width: 6,

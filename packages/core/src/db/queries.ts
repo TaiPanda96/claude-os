@@ -263,6 +263,22 @@ export function getCompactionEvents(db: Database, sessionId: string): Compaction
   ).map(rowToCompactionEvent);
 }
 
+export function getCompactionEventsForProject(
+  db: Database,
+  projectId: string,
+): CompactionEvent[] {
+  return (
+    db
+      .prepare(
+        `SELECT ce.* FROM compaction_events ce
+         JOIN sessions s ON s.id = ce.session_id
+         WHERE s.project_id = $projectId AND ce.status = 'completed'
+         ORDER BY ce.started_at DESC`,
+      )
+      .all({ $projectId: projectId }) as any[]
+  ).map(rowToCompactionEvent);
+}
+
 export function getLastCompactionEvent(
   db: Database,
   sessionId: string,
@@ -324,7 +340,9 @@ function rowToCompactionEvent(r: any): CompactionEvent {
     policy_id: r.policy_id,
     triggered_by: r.triggered_by as TriggerTypeEnum,
     trigger_detail: r.trigger_detail,
-    files_written: JSON.parse(r.files_written) as CompactionFileResult[],
+    files_written: (JSON.parse(r.files_written) as Array<CompactionFileResult & { preview?: string }>).map(
+      (f) => ({ ...f, content: f.content ?? f.preview ?? "" }),
+    ),
     tokens_at_trigger: r.tokens_at_trigger,
     output_size_tokens: r.output_size_tokens ?? 0,
     status: r.status,

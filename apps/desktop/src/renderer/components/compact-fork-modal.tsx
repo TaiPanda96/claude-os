@@ -7,7 +7,7 @@ type ModalState = "preview" | "compacting" | "done" | "error";
 interface FileResult {
   filename: string;
   bytes_written: number;
-  preview: string;
+  content: string;
 }
 
 interface CompletedEvent {
@@ -266,10 +266,7 @@ export function CompactForkModal({
                       </button>
                       {isExpanded && (
                         <div style={styles.filePreview}>
-                          {f.preview || <span style={{ opacity: 0.5 }}>(empty)</span>}
-                          {f.preview.length >= 200 && (
-                            <span style={styles.truncHint}> …truncated</span>
-                          )}
+                          {f.content || <span style={{ opacity: 0.5 }}>(empty)</span>}
                         </div>
                       )}
                     </div>
