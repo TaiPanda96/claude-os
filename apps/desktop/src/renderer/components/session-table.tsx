@@ -1,8 +1,8 @@
 import React, { useState } from "react";
-import { SessionRow, GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
+import { SessionRow, GC_COLOR, GC_TEXT, gcState } from "../types.js";
 import { tokens } from "../theme.js";
 
-type SortKey = "name" | "model" | "current_ctx_pct" | "turn_count" | "gc_state";
+type SortKey = "name" | "model" | "current_ctx_pct" | "cost_usd" | "turn_count";
 type SortDir = "asc" | "desc";
 
 interface Props {
@@ -10,12 +10,6 @@ interface Props {
   selected: string | null;
   onSelect: (id: string) => void;
 }
-
-const GC_LABEL: Record<GCState, string> = {
-  clean: "Clean",
-  soft_gc: "Soft GC",
-  hard_gc: "Hard GC",
-};
 
 export function SessionTable({ sessions, selected, onSelect }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("current_ctx_pct");
@@ -30,6 +24,9 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
     }
   }
 
+  // Normalize the cost sparkbar against the priciest visible session.
+  const maxCost = Math.max(0, ...sessions.map((s) => s.cost_usd));
+
   const sorted = [...sessions].sort((a, b) => {
     let av: string | number, bv: string | number;
     switch (sortKey) {
@@ -41,13 +38,13 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
         av = a.model;
         bv = b.model;
         break;
+      case "cost_usd":
+        av = a.cost_usd;
+        bv = b.cost_usd;
+        break;
       case "turn_count":
         av = a.turn_count;
         bv = b.turn_count;
-        break;
-      case "gc_state":
-        av = a.current_ctx_pct ?? 0;
-        bv = b.current_ctx_pct ?? 0;
         break;
       case "current_ctx_pct":
       default:
@@ -58,12 +55,18 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  function col(label: string, key: SortKey, align: "left" | "right" = "left") {
+  function col(
+    label: string,
+    key: SortKey,
+    align: "left" | "right" = "left",
+    width?: number,
+  ) {
     const active = sortKey === key;
     return (
       <th
         style={{
           ...styles.th,
+          ...(width ? { width } : {}),
           textAlign: align,
           cursor: "pointer",
           color: active ? tokens.text : tokens.border,
@@ -81,11 +84,10 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
         <thead>
           <tr style={styles.headerRow}>
             {col("Session", "name")}
-            {col("Model", "model")}
-            <th style={{ ...styles.th, width: 200 }}>Context Depth</th>
-            {col("CTX %", "current_ctx_pct", "right")}
-            {col("Turns", "turn_count", "right")}
-            {col("GC State", "gc_state", "right")}
+            {col("Model", "model", "left", 120)}
+            {col("Context", "current_ctx_pct", "left", 200)}
+            {col("Cost", "cost_usd", "right", 150)}
+            {col("Turns", "turn_count", "right", 80)}
           </tr>
         </thead>
         <tbody>
@@ -97,6 +99,9 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
             const isSelected = s.id === selected;
             const isHardGC = state === "hard_gc";
             const approxTokens = Math.round(pct * (s.ctx_window ?? 200_000));
+
+            const costFrac = maxCost > 0 ? s.cost_usd / maxCost : 0;
+            const costPerTurn = s.turn_count > 0 ? s.cost_usd / s.turn_count : 0;
 
             const rowClass = isHardGC ? "gc-row--hard_gc" : undefined;
 
@@ -110,7 +115,7 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                 }}
                 onClick={() => onSelect(s.id)}
               >
-                {/* Session name */}
+                {/* Session name — GC state stays legible via the dot + row tint */}
                 <td style={styles.td}>
                   <div style={styles.sessionCell}>
                     <span className={`gc-dot gc-dot--${state}`} />
@@ -133,7 +138,7 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                   </span>
                 </td>
 
-                {/* Progress bar */}
+                {/* Context — bar + inline %/tokens (collapses the old CTX% + GC cols) */}
                 <td style={styles.td}>
                   <div style={styles.barTrack}>
                     <div
@@ -159,37 +164,41 @@ export function SessionTable({ sessions, selected, onSelect }: Props) {
                       }}
                     />
                   </div>
-                  <span style={styles.barTokens}>
-                    {approxTokens > 0
-                      ? `${(approxTokens / 1000).toFixed(1)}k`
-                      : "—"}
-                  </span>
+                  <div style={styles.barMeta}>
+                    <span style={{ ...styles.barPct, color: textColor }}>
+                      {Math.min(pct * 100, 100).toFixed(1)}%
+                    </span>
+                    <span style={styles.barTokens}>
+                      {approxTokens > 0
+                        ? ` · ${(approxTokens / 1000).toFixed(1)}k`
+                        : ""}
+                    </span>
+                  </div>
                 </td>
 
-                {/* CTX % */}
+                {/* Cost — dollars + sparkbar (vs priciest) + $/turn */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span
-                    style={{
-                      ...styles.mono,
-                      color: textColor,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {Math.min(pct * 100, 100).toFixed(1)}%
-                  </span>
+                  <div style={styles.costAmount}>
+                    {s.pricing_fallback ? "~" : ""}${s.cost_usd.toFixed(2)}
+                  </div>
+                  <div style={styles.costTrack}>
+                    <div
+                      style={{
+                        ...styles.costFill,
+                        width: `${Math.min(costFrac * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div style={styles.costSub}>
+                    {s.pricing_fallback
+                      ? "est. pricing"
+                      : `$${costPerTurn.toFixed(2)}/turn`}
+                  </div>
                 </td>
 
                 {/* Turns */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
                   <span style={styles.mono}>{s.turn_count}</span>
-                </td>
-
-                {/* GC State chip */}
-                <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span className={`gc-chip gc-chip--${state}`}>
-                    <span className={`gc-dot gc-dot--${state}`} />
-                    {GC_LABEL[state]}
-                  </span>
                 </td>
               </tr>
             );
@@ -292,10 +301,45 @@ const styles: Record<string, React.CSSProperties> = {
     width: "20%",
     height: "100%",
   },
+  barMeta: {
+    display: "flex",
+    alignItems: "baseline",
+    fontFamily: tokens.fontMono,
+    fontSize: tokens.fsMicro,
+  },
+  barPct: {
+    fontWeight: 600,
+    fontVariantNumeric: "tabular-nums",
+  },
   barTokens: {
+    color: tokens.muted,
+  },
+  // Cost — neutral treatment so it never competes with the GC color language.
+  costAmount: {
+    color: tokens.text,
+    fontSize: tokens.fsData,
+    fontWeight: 600,
+    fontFamily: tokens.fontMono,
+    fontVariantNumeric: "tabular-nums",
+  },
+  costTrack: {
+    height: 3,
+    background: tokens.surface2,
+    borderRadius: 999,
+    overflow: "hidden",
+    margin: "3px 0",
+  },
+  costFill: {
+    height: "100%",
+    borderRadius: 999,
+    background: tokens.muted,
+    transition: "width 0.4s ease",
+  },
+  costSub: {
     color: tokens.muted,
     fontSize: tokens.fsMicro,
     fontFamily: tokens.fontMono,
+    fontVariantNumeric: "tabular-nums",
   },
   empty: {
     padding: 32,

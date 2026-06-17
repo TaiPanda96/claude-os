@@ -69,14 +69,49 @@ app.get("/sessions", (c) => {
         p.id   as project_id,
         p.name as project_name,
         (SELECT ctx_pct FROM turns WHERE session_id = s.id ORDER BY turn_index DESC LIMIT 1) as current_ctx_pct,
-        (SELECT COUNT(*) FROM turns WHERE session_id = s.id) as turn_count
+        (SELECT COUNT(*) FROM turns WHERE session_id = s.id) as turn_count,
+        -- LEFT JOIN + COALESCE so zero-turn sessions stay in the list at $0
+        COALESCE(tt.input_tokens, 0)          as input_tokens,
+        COALESCE(tt.output_tokens, 0)         as output_tokens,
+        COALESCE(tt.cache_read_tokens, 0)     as cache_read_tokens,
+        COALESCE(tt.cache_creation_tokens, 0) as cache_creation_tokens
        FROM sessions s
        LEFT JOIN projects p ON p.id = s.project_id
+       LEFT JOIN (
+         SELECT session_id,
+           SUM(input_tokens)          AS input_tokens,
+           SUM(output_tokens)         AS output_tokens,
+           SUM(cache_read_tokens)     AS cache_read_tokens,
+           SUM(cache_creation_tokens) AS cache_creation_tokens
+         FROM turns GROUP BY session_id
+       ) tt ON tt.session_id = s.id
        WHERE s.last_active_at >= $since
        ORDER BY s.last_active_at DESC`,
     )
-    .all({ $since: since });
-  return c.json(sessions);
+    .all({ $since: since }) as Array<{
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cache_read_tokens: number;
+    cache_creation_tokens: number;
+  }>;
+
+  // Annotate each row with an estimated dollar cost (mirrors /spend/sessions).
+  const annotated = sessions.map((r) => {
+    const { pricing, fallback } = getPricing(r.model);
+    return {
+      ...r,
+      cost_usd: computeCostUsd(
+        pricing,
+        r.input_tokens,
+        r.output_tokens,
+        r.cache_read_tokens,
+        r.cache_creation_tokens,
+      ),
+      pricing_fallback: fallback,
+    };
+  });
+  return c.json(annotated);
 });
 
 app.get("/sessions/:id", (c) => {

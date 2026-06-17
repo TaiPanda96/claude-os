@@ -1,5 +1,7 @@
 import React, { useEffect, useState, useCallback } from "react";
 import { ProjectSessionTree } from "./components/project-session-tree.js";
+import { SessionList } from "./components/session-list.js";
+import { SessionTable } from "./components/session-table.js";
 import { DetailPanel } from "./components/detail-panel.js";
 import { PolicyPanel } from "./components/policy-panel.js";
 import { SessionRow, SessionDetail, GCEvent, Project, SERVER } from "./types.js";
@@ -12,10 +14,11 @@ const TTL_OPTIONS = [
   { label: "All", days: 0 },
 ] as const;
 
-type ViewMode = "project" | "session";
+type ViewMode = "project" | "session" | "table";
 const VIEW_OPTIONS = [
   { label: "By Project", value: "project" },
   { label: "By Session", value: "session" },
+  { label: "Table", value: "table" },
 ] as const;
 
 export function App() {
@@ -174,17 +177,34 @@ export function App() {
         </div>
       </div>
 
-      {/* Main content — tree fills space, panels overlay from right */}
+      {/* Main content — tree/table fills space, panels overlay from right */}
       <div style={styles.content}>
-        <ProjectSessionTree
-          sessions={sessions}
-          projects={projects}
-          view={view}
-          ttlDays={ttlDays}
-          selected={selectedId}
-          onSelect={handleSelect}
-          onSelectProject={handleSelectProject}
-        />
+        {view === "table" ? (
+          // SessionList (left nav) + SessionTable (detail) — the two redesigned
+          // session views, mounted as the two-pane layout they were built for.
+          <div style={styles.tablePane}>
+            <SessionList
+              sessions={sessions}
+              selected={selectedId}
+              onSelect={handleSelect}
+            />
+            <SessionTable
+              sessions={sessions}
+              selected={selectedId}
+              onSelect={handleSelect}
+            />
+          </div>
+        ) : (
+          <ProjectSessionTree
+            sessions={sessions}
+            projects={projects}
+            view={view}
+            ttlDays={ttlDays}
+            selected={selectedId}
+            onSelect={handleSelect}
+            onSelectProject={handleSelectProject}
+          />
+        )}
 
         {selected && detail && (
           <DetailPanel
@@ -284,6 +304,13 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: "hidden",
     display: "flex",
     flexDirection: "column",
+  },
+  tablePane: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "row",
+    overflow: "hidden",
   },
   error: {
     height: "100vh",
