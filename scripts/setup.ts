@@ -3,18 +3,26 @@
  * First-run setup for Claude OS.
  *
  * 1. Checks prerequisites (Bun, Node, Claude Code CLI)
- * 2. Wires the Stop hook into ~/.claude/settings.json
- * 3. Offers to run the bulk ingest if ~/.claude/projects/ has transcripts
+ * 2. Ensures ANTHROPIC_API_KEY is set (required for compaction)
+ * 3. Wires the Stop hook into ~/.claude/settings.json
+ * 4. Offers to run the bulk ingest if ~/.claude/projects/ has transcripts
  */
 
 import { existsSync, readFileSync, writeFileSync, readdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import * as readline from "node:readline";
 
 const REPO_ROOT = resolve(dirname(import.meta.path), "..");
 const HOOK_SCRIPT = join(REPO_ROOT, "scripts", "hook-stop.ts");
 const SETTINGS_PATH = join(process.env.HOME ?? "~", ".claude", "settings.json");
 const CLAUDE_PROJECTS_PATH = join(process.env.HOME ?? "~", ".claude", "projects");
+// Packages that run Anthropic API calls — each needs the key in its own .env
+// because Bun resolves .env relative to the process cwd.
+const ENV_PATHS = [
+  join(REPO_ROOT, "packages", "core", ".env"),
+  join(REPO_ROOT, "packages", "server", ".env"),
+];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -95,7 +103,60 @@ if (prereqsFailed) {
   process.exit(1);
 }
 
-// ── 2. Hook wiring ────────────────────────────────────────────────────────────
+// ── 2. Anthropic API key ──────────────────────────────────────────────────────
+
+header("Anthropic API key (required for compaction)");
+
+function readEnvKey(filePath: string): string | undefined {
+  if (!existsSync(filePath)) return undefined;
+  const line = readFileSync(filePath, "utf-8")
+    .split("\n")
+    .find((l) => l.startsWith("ANTHROPIC_API_KEY="));
+  return line ? line.slice("ANTHROPIC_API_KEY=".length).trim() : undefined;
+}
+
+function writeEnvKey(filePath: string, apiKey: string): void {
+  let content = existsSync(filePath) ? readFileSync(filePath, "utf-8") : "";
+  if (content.includes("ANTHROPIC_API_KEY=")) {
+    content = content.replace(/^ANTHROPIC_API_KEY=.*/m, `ANTHROPIC_API_KEY=${apiKey}`);
+  } else {
+    content = content.trimEnd();
+    content += (content ? "\n" : "") + `ANTHROPIC_API_KEY=${apiKey}\n`;
+  }
+  writeFileSync(filePath, content, "utf-8");
+}
+
+async function prompt(question: string): Promise<string> {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  return new Promise((resolve) => rl.question(question, (ans) => { rl.close(); resolve(ans.trim()); }));
+}
+
+// Check if key is already set in any env file or in the current environment
+const existingKey = process.env.ANTHROPIC_API_KEY ?? readEnvKey(ENV_PATHS[0]!);
+
+if (existingKey) {
+  ok("ANTHROPIC_API_KEY already configured");
+  // Ensure it's written to all env files (e.g. after a fresh clone with only one file present)
+  for (const p of ENV_PATHS) {
+    if (!readEnvKey(p)) writeEnvKey(p, existingKey);
+  }
+} else {
+  warn("ANTHROPIC_API_KEY not found — compaction requires it");
+  info("You can get an API key at https://console.anthropic.com/");
+  const apiKey = await prompt("     Paste your Anthropic API key (or press Enter to skip): ");
+  if (apiKey && apiKey.startsWith("sk-ant-")) {
+    for (const p of ENV_PATHS) writeEnvKey(p, apiKey);
+    ok(`API key saved to packages/core/.env and packages/server/.env`);
+  } else if (apiKey) {
+    warn("Key doesn't look like an Anthropic API key (expected sk-ant-...) — skipping");
+    info("Set ANTHROPIC_API_KEY manually in packages/core/.env and packages/server/.env before using compaction.");
+  } else {
+    warn("Skipped — compaction will fail until ANTHROPIC_API_KEY is set");
+    info("Add it to packages/core/.env and packages/server/.env later.");
+  }
+}
+
+// ── 4. Hook wiring ────────────────────────────────────────────────────────────
 
 header("Wiring Claude Code stop hook");
 
@@ -137,7 +198,7 @@ if (alreadyInstalled) {
   info(`Command: ${hookCommand}`);
 }
 
-// ── 3. Ingest prompt ──────────────────────────────────────────────────────────
+// ── 5. Ingest prompt ──────────────────────────────────────────────────────────
 
 header("Existing session data");
 
@@ -171,7 +232,10 @@ console.log(`
 \x1b[1mSetup complete.\x1b[0m
 
 Next steps:
-  1. Run \x1b[1mbun run ingest\x1b[0m  (optional — imports existing sessions)
-  2. Run \x1b[1mbun run dev\x1b[0m     (starts the activity monitor)
+  1. Run \x1b[1mbun run ingest\x1b[0m     (optional — imports existing sessions)
+  2. Run \x1b[1mbun run dev\x1b[0m        (starts the activity monitor)
   3. End a Claude Code session — the hook fires automatically and the DB updates
+
+Note: Compaction requires ANTHROPIC_API_KEY in packages/core/.env and
+      packages/server/.env. Re-run \x1b[1mbun run setup\x1b[0m at any time to update it.
 `);
