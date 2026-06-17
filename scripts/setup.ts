@@ -17,12 +17,10 @@ const REPO_ROOT = resolve(dirname(import.meta.path), "..");
 const HOOK_SCRIPT = join(REPO_ROOT, "scripts", "hook-stop.ts");
 const SETTINGS_PATH = join(process.env.HOME ?? "~", ".claude", "settings.json");
 const CLAUDE_PROJECTS_PATH = join(process.env.HOME ?? "~", ".claude", "projects");
-// Packages that run Anthropic API calls — each needs the key in its own .env
-// because Bun resolves .env relative to the process cwd.
-const ENV_PATHS = [
-  join(REPO_ROOT, "packages", "core", ".env"),
-  join(REPO_ROOT, "packages", "server", ".env"),
-];
+// The server is spawned by Electron main with cwd=REPO_ROOT and --env-file pointing here.
+// hook-stop.ts and ingest.ts run from their script dir but inherit the shell environment.
+// One file at repo root is the single source of truth.
+const ENV_PATHS = [join(REPO_ROOT, ".env")];
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -146,13 +144,13 @@ if (existingKey) {
   const apiKey = await prompt("     Paste your Anthropic API key (or press Enter to skip): ");
   if (apiKey && apiKey.startsWith("sk-ant-")) {
     for (const p of ENV_PATHS) writeEnvKey(p, apiKey);
-    ok(`API key saved to packages/core/.env and packages/server/.env`);
+    ok(`API key saved to .env`);
   } else if (apiKey) {
     warn("Key doesn't look like an Anthropic API key (expected sk-ant-...) — skipping");
-    info("Set ANTHROPIC_API_KEY manually in packages/core/.env and packages/server/.env before using compaction.");
+    info("Set ANTHROPIC_API_KEY manually in .env at the repo root before using compaction.");
   } else {
     warn("Skipped — compaction will fail until ANTHROPIC_API_KEY is set");
-    info("Add it to packages/core/.env and packages/server/.env later.");
+    info("Add ANTHROPIC_API_KEY=sk-ant-... to .env at the repo root later.");
   }
 }
 
@@ -236,6 +234,6 @@ Next steps:
   2. Run \x1b[1mbun run dev\x1b[0m        (starts the activity monitor)
   3. End a Claude Code session — the hook fires automatically and the DB updates
 
-Note: Compaction requires ANTHROPIC_API_KEY in packages/core/.env and
-      packages/server/.env. Re-run \x1b[1mbun run setup\x1b[0m at any time to update it.
+Note: Compaction requires ANTHROPIC_API_KEY in .env at the repo root.
+      Re-run \x1b[1mbun run setup\x1b[0m at any time to update it.
 `);
