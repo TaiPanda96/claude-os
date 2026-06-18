@@ -26,10 +26,8 @@ const METRIC_CONFIG: Record<Metric, MetricMeta> = {
   quality: {
     label: "Output Quality",
     signal: "Is Claude degrading as context fills?",
-    formula:
-      "0.5 × output density  +  0.3 × (1 − self-corrections)  +  0.2 × (1 − repetition)",
-    watchFor:
-      "Sustained drops past 60% ctx — earlier the drop, the more context is hurting output",
+    formula: "0.5 × output density  +  0.3 × (1 − self-corrections)  +  0.2 × (1 − repetition)",
+    watchFor: "Sustained drops past 60% ctx — earlier the drop, the more context is hurting output",
     yLabel: "quality score  [0–1]",
     color: tokens.text,
   },
@@ -37,18 +35,15 @@ const METRIC_CONFIG: Record<Metric, MetricMeta> = {
     label: "Context Bloat Rate",
     signal: "How fast is context inflating vs. useful output?",
     formula: "new ctx tokens introduced this turn  ÷  output tokens produced",
-    watchFor:
-      "Rising ratio → context growing faster than work — approaching diminishing returns",
+    watchFor: "Rising ratio → context growing faster than work — approaching diminishing returns",
     yLabel: "bloat score (vs. 8× anchor)  [0–1]",
     color: "#bf5af2",
   },
   workEfficiency: {
     label: "Token Cost / Artifact",
     signal: "Are meaningful turns getting more expensive to produce?",
-    formula:
-      "new context tokens (trailing 10 turns)  ÷  useful turns in that window",
-    watchFor:
-      "Rising curve = GC pressure — context grows faster than useful output appears",
+    formula: "new context tokens (trailing 10 turns)  ÷  useful turns in that window",
+    watchFor: "Rising curve = GC pressure — context grows faster than useful output appears",
     yLabel: "token cost / artifact  [0–1, log]",
     color: "#0a84ff",
   },
@@ -65,23 +60,13 @@ function CustomDot(props: any) {
     metric === "quality"
       ? (GC_COLOR[payload.gcState as keyof typeof GC_COLOR] ?? GC_COLOR.clean)
       : METRIC_CONFIG[metric].color;
-  return (
-    <circle
-      cx={cx}
-      cy={cy}
-      r={3}
-      fill={color}
-      fillOpacity={0.8}
-      stroke="none"
-    />
-  );
+  return <circle cx={cx} cy={cy} r={3} fill={color} fillOpacity={0.8} stroke="none" />;
 }
 
 function CustomTooltip({ active, payload, metric }: any) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload as ChartPoint;
-  const stateTextColor =
-    GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
+  const stateTextColor = GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
   return (
     <div style={tooltipStyle}>
       <div style={{ color: stateTextColor, fontWeight: 600, marginBottom: 6 }}>
@@ -108,9 +93,7 @@ function CustomTooltip({ active, payload, metric }: any) {
         </span>
       </div>
       <div style={tooltipRow}>
-        <span
-          style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}
-        >
+        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>
           token cost / artifact
         </span>
         <span style={tooltipValue}>
@@ -156,16 +139,21 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
     return <div style={styles.empty}>No turn data</div>;
   }
 
+  // Auto-fit the X domain to the session's actual context range so the size of the
+  // context window (e.g. 1M on Max vs 200K) doesn't compress the curve into a sliver
+  // on the left. Add ~8% headroom, round up to a readable step, cap at 100% (ctxPct
+  // can't exceed its window). GC-zone/threshold markers therefore only appear when a
+  // session actually reaches them — which is the truthful, un-skewed view.
   const maxCtx = Math.max(...data.map((d) => d.ctxPct));
-  const xMax = Math.max(100, Math.ceil(maxCtx / 20) * 20);
+  const padded = maxCtx * 1.08;
+  const step = padded <= 20 ? 5 : padded <= 50 ? 10 : 20;
+  const xMax = Math.min(100, Math.max(step, Math.ceil(padded / step) * step));
   const cfg = METRIC_CONFIG[metric];
 
   return (
     <div style={styles.container}>
       {/* Title */}
-      <div style={styles.title}>
-        {sessionName ?? "Session"} — Context Efficiency Curve
-      </div>
+      <div style={styles.title}>{sessionName ?? "Session"} — Context Efficiency Curve</div>
 
       {/* Metric selector — card tabs */}
       <div style={styles.metricTabs}>
@@ -220,20 +208,13 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
         {(["clean", "soft_gc", "hard_gc"] as const).map((s) => (
           <span key={s} style={styles.legendItem}>
             <span style={{ ...styles.legendDot, background: GC_COLOR[s] }} />
-            {s === "clean"
-              ? "Clean <60%"
-              : s === "soft_gc"
-                ? "Soft GC 60–80%"
-                : "Hard GC >80%"}
+            {s === "clean" ? "Clean <60%" : s === "soft_gc" ? "Soft GC 60–80%" : "Hard GC >80%"}
           </span>
         ))}
       </div>
 
       <ResponsiveContainer width="100%" height="100%">
-        <LineChart
-          data={data}
-          margin={{ top: 24, right: 48, bottom: 32, left: 0 }}
-        >
+        <LineChart data={data} margin={{ top: 24, right: 48, bottom: 32, left: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke={tokens.surface2} />
           <XAxis
             dataKey="ctxPct"
