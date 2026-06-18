@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { SessionRow, GC_COLOR, gcState } from "../types.js";
 
-type ViewMode = "project" | "turns" | "ctx_pct";
+type ViewMode = "project" | "turns" | "ctx_pct" | "cost";
 
 interface Props {
   sessions: SessionRow[];
@@ -40,8 +40,12 @@ function SessionItem({
         <span style={{ ...styles.pct, color }}>{(pct * 100).toFixed(0)}%</span>
       </div>
       <div style={styles.rowBottom}>
-        <span style={styles.meta}>{s.turn_count} turns</span>
-        <span style={styles.meta}>{s.model.replace("claude-", "")}</span>
+        <span style={styles.meta}>
+          {s.turn_count} turns · {s.model.replace("claude-", "")}
+        </span>
+        <span style={styles.metaCost}>
+          {s.pricing_fallback ? "~" : ""}${s.cost_usd.toFixed(2)}
+        </span>
       </div>
       <div style={styles.track}>
         <div
@@ -60,12 +64,16 @@ function GroupHeader({
   label,
   count,
   maxCtxPct,
+  totalCost,
+  costFallback,
   open,
   onToggle,
 }: {
   label: string;
   count: number;
   maxCtxPct: number;
+  totalCost: number;
+  costFallback: boolean;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -76,6 +84,9 @@ function GroupHeader({
       <span style={styles.chevron}>{open ? "▾" : "▸"}</span>
       <span style={styles.groupName}>{label}</span>
       <span style={styles.groupMeta}>{count}</span>
+      <span style={styles.groupCost}>
+        {costFallback ? "~" : ""}${totalCost.toFixed(2)}
+      </span>
       <span style={{ ...styles.groupPct, color }}>
         {(maxCtxPct * 100).toFixed(0)}%
       </span>
@@ -102,6 +113,8 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
   const byCtx = [...sessions].sort(
     (a, b) => (b.current_ctx_pct ?? 0) - (a.current_ctx_pct ?? 0),
   );
+
+  const byCost = [...sessions].sort((a, b) => b.cost_usd - a.cost_usd);
 
   // Group by name (project = cwd basename). Ungrouped = "unnamed"
   const projectGroups: Map<string, SessionRow[]> = new Map();
@@ -140,13 +153,19 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
       <div style={styles.header}>
         <span style={styles.headerLabel}>Sessions</span>
         <div style={styles.tabs}>
-          {(["project", "turns", "ctx_pct"] as ViewMode[]).map((v) => (
+          {(["project", "turns", "ctx_pct", "cost"] as ViewMode[]).map((v) => (
             <button
               key={v}
               style={{ ...styles.tab, ...(view === v ? styles.tabActive : {}) }}
               onClick={() => setView(v)}
             >
-              {v === "project" ? "project" : v === "turns" ? "turns" : "ctx%"}
+              {v === "project"
+                ? "project"
+                : v === "turns"
+                  ? "turns"
+                  : v === "ctx_pct"
+                    ? "ctx%"
+                    : "cost"}
             </button>
           ))}
         </div>
@@ -163,12 +182,16 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
           const maxCtx = Math.max(
             ...groupSessions.map((s) => s.current_ctx_pct ?? 0),
           );
+          const totalCost = groupSessions.reduce((sum, s) => sum + s.cost_usd, 0);
+          const costFallback = groupSessions.some((s) => s.pricing_fallback);
           return (
             <div key={groupName}>
               <GroupHeader
                 label={groupName}
                 count={groupSessions.length}
                 maxCtxPct={maxCtx}
+                totalCost={totalCost}
+                costFallback={costFallback}
                 open={isOpen}
                 onToggle={() => toggleGroup(groupName)}
               />
@@ -195,6 +218,9 @@ export function SessionList({ sessions, selected, onSelect }: Props) {
           byCtx,
           (s) => `${((s.current_ctx_pct ?? 0) * 100).toFixed(0)}%`,
         )}
+
+      {/* Ranked by cost — dollar amount shows per-row in the meta line */}
+      {view === "cost" && renderFlat(byCost, (_, i) => `#${i + 1}`)}
     </div>
   );
 }
@@ -287,6 +313,13 @@ const styles: Record<string, React.CSSProperties> = {
     fontFamily: "monospace",
     marginRight: 4,
   },
+  groupCost: {
+    fontSize: 11,
+    color: "#8e8e93",
+    fontFamily: "monospace",
+    fontVariantNumeric: "tabular-nums",
+    marginRight: 6,
+  },
   groupPct: {
     fontSize: 11,
     fontWeight: 600,
@@ -357,6 +390,17 @@ const styles: Record<string, React.CSSProperties> = {
   meta: {
     color: "#48484a",
     fontSize: 11,
+    minWidth: 0,
+    overflow: "hidden",
+    textOverflow: "ellipsis",
+    whiteSpace: "nowrap" as const,
+  },
+  metaCost: {
+    color: "#8e8e93",
+    fontSize: 11,
+    fontVariantNumeric: "tabular-nums",
+    flexShrink: 0,
+    marginLeft: 6,
   },
   track: {
     height: 2,

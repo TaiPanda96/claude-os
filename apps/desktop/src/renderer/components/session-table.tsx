@@ -1,27 +1,24 @@
 import React, { useState } from "react";
-import { SessionRow, GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
+import { SessionRow, GC_COLOR, GC_TEXT, gcState } from "../types.js";
 import { tokens, gc } from "../theme.js";
+import { ActionOverflow, OverflowAction } from "./action-overflow.js";
 
-type SortKey = "name" | "model" | "current_ctx_pct" | "turn_count" | "gc_state";
+type SortKey = "name" | "model" | "current_ctx_pct" | "cost_usd" | "turn_count";
 type SortDir = "asc" | "desc";
 
 interface Props {
   sessions: SessionRow[];
   selected: string | null;
   onSelect: (id: string) => void;
-  onCompactFork?: (id: string) => void;
+  /** Compact in place — prune the session destructively and continue. */
+  onCompact?: (id: string) => void;
+  /** Compact and fork — write memory.md and branch a fresh session. */
+  onFork?: (id: string) => void;
 }
 
-const GC_LABEL: Record<GCState, string> = {
-  clean: "Clean",
-  soft_gc: "Soft GC",
-  hard_gc: "Hard GC",
-};
-
-export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Props) {
+export function SessionTable({ sessions, selected, onSelect, onCompact, onFork }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("current_ctx_pct");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -31,6 +28,9 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
       setSortDir("desc");
     }
   }
+
+  // Normalize the cost sparkbar against the priciest visible session.
+  const maxCost = Math.max(0, ...sessions.map((s) => s.cost_usd));
 
   const sorted = [...sessions].sort((a, b) => {
     let av: string | number, bv: string | number;
@@ -43,13 +43,13 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
         av = a.model;
         bv = b.model;
         break;
+      case "cost_usd":
+        av = a.cost_usd;
+        bv = b.cost_usd;
+        break;
       case "turn_count":
         av = a.turn_count;
         bv = b.turn_count;
-        break;
-      case "gc_state":
-        av = a.current_ctx_pct ?? 0;
-        bv = b.current_ctx_pct ?? 0;
         break;
       case "current_ctx_pct":
       default:
@@ -60,12 +60,13 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
     return sortDir === "asc" ? cmp : -cmp;
   });
 
-  function col(label: string, key: SortKey, align: "left" | "right" = "left") {
+  function col(label: string, key: SortKey, align: "left" | "right" = "left", width?: number) {
     const active = sortKey === key;
     return (
       <th
         style={{
           ...styles.th,
+          ...(width ? { width } : {}),
           textAlign: align,
           cursor: "pointer",
           color: active ? tokens.text : tokens.border,
@@ -83,11 +84,11 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
         <thead>
           <tr style={styles.headerRow}>
             {col("Session", "name")}
-            {col("Model", "model")}
-            <th style={{ ...styles.th, width: 200 }}>Context Depth</th>
-            {col("CTX %", "current_ctx_pct", "right")}
-            {col("Turns", "turn_count", "right")}
-            {col("GC State", "gc_state", "right")}
+            {col("Model", "model", "left", 120)}
+            {col("Context", "current_ctx_pct", "left", 200)}
+            {col("Cost", "cost_usd", "right", 150)}
+            {col("Turns", "turn_count", "right", 80)}
+            <th style={{ ...styles.th, width: 56 }} aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -100,10 +101,39 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
             const isHardGC = state === "hard_gc";
             const approxTokens = Math.round(pct * (s.ctx_window ?? 200_000));
 
+            const costFrac = maxCost > 0 ? s.cost_usd / maxCost : 0;
+            const costPerTurn = s.turn_count > 0 ? s.cost_usd / s.turn_count : 0;
+
             const rowClass = isHardGC ? "gc-row--hard_gc" : undefined;
 
-            const isHovered = hoveredId === s.id;
-            const canFork = state === "soft_gc" || state === "hard_gc";
+            const hasTurns = s.turn_count > 0;
+            const rowActions: OverflowAction[] = [
+              {
+                key: "compact",
+                glyph: "⊟",
+                label: "Compact",
+                description: "Prune session destructively & continue",
+                danger: true,
+                disabled: !hasTurns,
+                onSelect: () => onCompact?.(s.id),
+              },
+              {
+                key: "fork",
+                glyph: "⑂",
+                label: "Fork",
+                description: "Compact & update memory.md",
+                disabled: !hasTurns,
+                onSelect: () => onFork?.(s.id),
+              },
+              {
+                key: "knowledge-graph",
+                glyph: "◈",
+                label: "Add to Knowledge Graph",
+                description: "Synthesize to invariant knowledge store",
+                disabled: true,
+                badge: "Soon",
+              },
+            ];
 
             return (
               <tr
@@ -114,10 +144,8 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
                   ...(isSelected && !isHardGC ? styles.rowSelected : {}),
                 }}
                 onClick={() => onSelect(s.id)}
-                onMouseEnter={() => setHoveredId(s.id)}
-                onMouseLeave={() => setHoveredId(null)}
               >
-                {/* Session name */}
+                {/* Session name — GC state stays legible via the dot + row tint */}
                 <td style={styles.td}>
                   <div style={styles.sessionCell}>
                     <span className={`gc-dot gc-dot--${state}`} />
@@ -131,7 +159,10 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
                     </span>
                     <span style={styles.sessionId}>{s.id.slice(0, 6)}</span>
                     {s.forked_from && (
-                      <span style={styles.forkBadge} title={`Forked from ${s.forked_from.slice(0, 8)}`}>
+                      <span
+                        style={styles.forkBadge}
+                        title={`Forked from ${s.forked_from.slice(0, 8)}`}
+                      >
                         ⑂ {s.forked_from.slice(0, 6)}
                       </span>
                     )}
@@ -140,12 +171,10 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
 
                 {/* Model */}
                 <td style={styles.td}>
-                  <span style={styles.mono}>
-                    {s.model.replace("claude-", "")}
-                  </span>
+                  <span style={styles.mono}>{s.model.replace("claude-", "")}</span>
                 </td>
 
-                {/* Progress bar */}
+                {/* Context — bar + inline %/tokens (collapses the old CTX% + GC cols) */}
                 <td style={styles.td}>
                   <div style={styles.barTrack}>
                     <div
@@ -171,24 +200,32 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
                       }}
                     />
                   </div>
-                  <span style={styles.barTokens}>
-                    {approxTokens > 0
-                      ? `${(approxTokens / 1000).toFixed(1)}k`
-                      : "—"}
-                  </span>
+                  <div style={styles.barMeta}>
+                    <span style={{ ...styles.barPct, color: textColor }}>
+                      {Math.min(pct * 100, 100).toFixed(1)}%
+                    </span>
+                    <span style={styles.barTokens}>
+                      {approxTokens > 0 ? ` · ${(approxTokens / 1000).toFixed(1)}k` : ""}
+                    </span>
+                  </div>
                 </td>
 
-                {/* CTX % */}
+                {/* Cost — dollars + sparkbar (vs priciest) + $/turn */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  <span
-                    style={{
-                      ...styles.mono,
-                      color: textColor,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {Math.min(pct * 100, 100).toFixed(1)}%
-                  </span>
+                  <div style={styles.costAmount}>
+                    {s.pricing_fallback ? "~" : ""}${s.cost_usd.toFixed(2)}
+                  </div>
+                  <div style={styles.costTrack}>
+                    <div
+                      style={{
+                        ...styles.costFill,
+                        width: `${Math.min(costFrac * 100, 100)}%`,
+                      }}
+                    />
+                  </div>
+                  <div style={styles.costSub}>
+                    {s.pricing_fallback ? "est. pricing" : `$${costPerTurn.toFixed(2)}/turn`}
+                  </div>
                 </td>
 
                 {/* Turns */}
@@ -196,24 +233,12 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
                   <span style={styles.mono}>{s.turn_count}</span>
                 </td>
 
-                {/* GC State chip / Compact & Fork button on hover */}
+                {/* Row actions — Compact / Fork / Add to Knowledge Graph */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  {isHovered && canFork && onCompactFork ? (
-                    <button
-                      style={styles.compactForkBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCompactFork(s.id);
-                      }}
-                    >
-                      ⑂ Compact &amp; Fork
-                    </button>
-                  ) : (
-                    <span className={`gc-chip gc-chip--${state}`}>
-                      <span className={`gc-dot gc-dot--${state}`} />
-                      {GC_LABEL[state]}
-                    </span>
-                  )}
+                  <ActionOverflow
+                    actions={rowActions}
+                    ariaLabel={`Actions for ${s.name ?? s.id.slice(0, 6)}`}
+                  />
                 </td>
               </tr>
             );
@@ -221,9 +246,7 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
         </tbody>
       </table>
 
-      {sessions.length === 0 && (
-        <div style={styles.empty}>No sessions — run bun run ingest</div>
-      )}
+      {sessions.length === 0 && <div style={styles.empty}>No sessions — run bun run ingest</div>}
     </div>
   );
 }
@@ -316,10 +339,45 @@ const styles: Record<string, React.CSSProperties> = {
     width: "20%",
     height: "100%",
   },
+  barMeta: {
+    display: "flex",
+    alignItems: "baseline",
+    fontFamily: tokens.fontMono,
+    fontSize: tokens.fsMicro,
+  },
+  barPct: {
+    fontWeight: 600,
+    fontVariantNumeric: "tabular-nums",
+  },
   barTokens: {
+    color: tokens.muted,
+  },
+  // Cost — neutral treatment so it never competes with the GC color language.
+  costAmount: {
+    color: tokens.text,
+    fontSize: tokens.fsData,
+    fontWeight: 600,
+    fontFamily: tokens.fontMono,
+    fontVariantNumeric: "tabular-nums",
+  },
+  costTrack: {
+    height: 3,
+    background: tokens.surface2,
+    borderRadius: 999,
+    overflow: "hidden",
+    margin: "3px 0",
+  },
+  costFill: {
+    height: "100%",
+    borderRadius: 999,
+    background: tokens.muted,
+    transition: "width 0.4s ease",
+  },
+  costSub: {
     color: tokens.muted,
     fontSize: tokens.fsMicro,
     fontFamily: tokens.fontMono,
+    fontVariantNumeric: "tabular-nums",
   },
   empty: {
     padding: 32,
@@ -337,17 +395,5 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: tokens.radiusPill,
     padding: "1px 6px",
     flexShrink: 0,
-  },
-  compactForkBtn: {
-    background: gc.soft_gc.bg,
-    border: `1px solid ${gc.soft_gc.border}`,
-    borderRadius: tokens.radiusSm,
-    color: gc.soft_gc.text,
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    cursor: "pointer",
-    padding: "3px 8px",
-    fontWeight: 600,
-    letterSpacing: "0.02em",
   },
 };

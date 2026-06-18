@@ -7,6 +7,10 @@ export interface SessionRow {
   current_ctx_pct: number | null;
   turn_count: number;
   last_active_at: number;
+  // Estimated dollar cost over the session's turns; pricing_fallback is true
+  // when the model isn't in MODEL_PRICING and a fallback rate was used.
+  cost_usd: number;
+  pricing_fallback: boolean;
   // Project topology — present when server JOINs projects table
   project_id: string | null;
   project_name: string | null;
