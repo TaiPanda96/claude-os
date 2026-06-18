@@ -1,12 +1,7 @@
 import React, { useState } from "react";
-import { SessionRow, GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
+import { SessionRow, GC_COLOR, GC_TEXT, gcState } from "../types.js";
 import { tokens, gc } from "../theme.js";
-
-const GC_LABEL: Record<GCState, string> = {
-  clean: "Clean",
-  soft_gc: "Soft GC",
-  hard_gc: "Hard GC",
-};
+import { ActionOverflow, OverflowAction } from "./action-overflow.js";
 
 type SortKey = "name" | "model" | "current_ctx_pct" | "cost_usd" | "turn_count";
 type SortDir = "asc" | "desc";
@@ -15,13 +10,15 @@ interface Props {
   sessions: SessionRow[];
   selected: string | null;
   onSelect: (id: string) => void;
-  onCompactFork?: (id: string) => void;
+  /** Compact in place — prune the session destructively and continue. */
+  onCompact?: (id: string) => void;
+  /** Compact and fork — write memory.md and branch a fresh session. */
+  onFork?: (id: string) => void;
 }
 
-export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Props) {
+export function SessionTable({ sessions, selected, onSelect, onCompact, onFork }: Props) {
   const [sortKey, setSortKey] = useState<SortKey>("current_ctx_pct");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
-  const [hoveredId, setHoveredId] = useState<string | null>(null);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -91,6 +88,7 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
             {col("Context", "current_ctx_pct", "left", 200)}
             {col("Cost", "cost_usd", "right", 150)}
             {col("Turns", "turn_count", "right", 80)}
+            <th style={{ ...styles.th, width: 56 }} aria-label="Actions" />
           </tr>
         </thead>
         <tbody>
@@ -108,8 +106,34 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
 
             const rowClass = isHardGC ? "gc-row--hard_gc" : undefined;
 
-            const isHovered = hoveredId === s.id;
-            const canFork = state === "soft_gc" || state === "hard_gc";
+            const hasTurns = s.turn_count > 0;
+            const rowActions: OverflowAction[] = [
+              {
+                key: "compact",
+                glyph: "⊟",
+                label: "Compact",
+                description: "Prune session destructively & continue",
+                danger: true,
+                disabled: !hasTurns,
+                onSelect: () => onCompact?.(s.id),
+              },
+              {
+                key: "fork",
+                glyph: "⑂",
+                label: "Fork",
+                description: "Compact & update memory.md",
+                disabled: !hasTurns,
+                onSelect: () => onFork?.(s.id),
+              },
+              {
+                key: "knowledge-graph",
+                glyph: "◈",
+                label: "Add to Knowledge Graph",
+                description: "Synthesize to invariant knowledge store",
+                disabled: true,
+                badge: "Soon",
+              },
+            ];
 
             return (
               <tr
@@ -120,8 +144,6 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
                   ...(isSelected && !isHardGC ? styles.rowSelected : {}),
                 }}
                 onClick={() => onSelect(s.id)}
-                onMouseEnter={() => setHoveredId(s.id)}
-                onMouseLeave={() => setHoveredId(null)}
               >
                 {/* Session name — GC state stays legible via the dot + row tint */}
                 <td style={styles.td}>
@@ -211,24 +233,12 @@ export function SessionTable({ sessions, selected, onSelect, onCompactFork }: Pr
                   <span style={styles.mono}>{s.turn_count}</span>
                 </td>
 
-                {/* GC State chip / Compact & Fork button on hover */}
+                {/* Row actions — Compact / Fork / Add to Knowledge Graph */}
                 <td style={{ ...styles.td, textAlign: "right" }}>
-                  {isHovered && canFork && onCompactFork ? (
-                    <button
-                      style={styles.compactForkBtn}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onCompactFork(s.id);
-                      }}
-                    >
-                      ⑂ Compact &amp; Fork
-                    </button>
-                  ) : (
-                    <span className={`gc-chip gc-chip--${state}`}>
-                      <span className={`gc-dot gc-dot--${state}`} />
-                      {GC_LABEL[state]}
-                    </span>
-                  )}
+                  <ActionOverflow
+                    actions={rowActions}
+                    ariaLabel={`Actions for ${s.name ?? s.id.slice(0, 6)}`}
+                  />
                 </td>
               </tr>
             );
@@ -385,17 +395,5 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: tokens.radiusPill,
     padding: "1px 6px",
     flexShrink: 0,
-  },
-  compactForkBtn: {
-    background: gc.soft_gc.bg,
-    border: `1px solid ${gc.soft_gc.border}`,
-    borderRadius: tokens.radiusSm,
-    color: gc.soft_gc.text,
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    cursor: "pointer",
-    padding: "3px 8px",
-    fontWeight: 600,
-    letterSpacing: "0.02em",
   },
 };

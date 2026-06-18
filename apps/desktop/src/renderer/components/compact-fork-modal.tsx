@@ -23,7 +23,10 @@ interface Props {
   ctxPct: number;
   ctxWindow: number;
   lastCompaction: CompactionEventSummary | null;
-  onDone: (forkId: string) => void;
+  // "fork": compact then branch a fresh session (writes memory + fork record).
+  // "compact": compact in place — prune and continue the same session lineage.
+  mode?: "fork" | "compact";
+  onDone: (forkId: string | null) => void;
   onClose: () => void;
 }
 
@@ -34,9 +37,13 @@ export function CompactForkModal({
   ctxPct,
   ctxWindow,
   lastCompaction,
+  mode = "fork",
   onDone,
   onClose,
 }: Props) {
+  const isFork = mode === "fork";
+  const title = isFork ? "Compact & Fork" : "Compact";
+  const confirmLabel = isFork ? "⑂ Compact & Fork" : "⊟ Compact";
   const [state, setState] = useState<ModalState>("preview");
   const [forkId, setForkId] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -102,14 +109,17 @@ export function CompactForkModal({
       }
       if (!finished) throw new Error("Compaction timed out after 120s");
 
-      // Create fork record
-      const forkRes = await fetch(`${SERVER}/sessions/${sessionId}/fork`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
-      });
-      if (!forkRes.ok) throw new Error(`Fork failed: ${forkRes.status}`);
-      const { id } = (await forkRes.json()) as { id: string };
+      // Fork mode also branches a fresh session; compact mode prunes in place.
+      let id: string | null = null;
+      if (isFork) {
+        const forkRes = await fetch(`${SERVER}/sessions/${sessionId}/fork`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        if (!forkRes.ok) throw new Error(`Fork failed: ${forkRes.status}`);
+        ({ id } = (await forkRes.json()) as { id: string });
+      }
 
       setCompletedEvent(finished);
       setForkId(id);
@@ -123,8 +133,12 @@ export function CompactForkModal({
             ? "granted"
             : await Notification.requestPermission();
         if (grant === "granted") {
-          new Notification("⑂ Fork ready — Claude OS", {
-            body: `${finished.files_written.length} memory file${finished.files_written.length !== 1 ? "s" : ""} written. Open a new Claude session in this project to continue.`,
+          const fileCount = finished.files_written.length;
+          const filesLine = `${fileCount} memory file${fileCount !== 1 ? "s" : ""} written.`;
+          new Notification(`${isFork ? "⑂ Fork" : "⊟ Compact"} ready — Claude OS`, {
+            body: isFork
+              ? `${filesLine} Open a new Claude session in this project to continue.`
+              : `${filesLine} Next session in this project starts lean.`,
             silent: false,
           });
         }
@@ -152,8 +166,8 @@ export function CompactForkModal({
       <div style={{ ...styles.modal, ...(state === "done" ? styles.modalWide : {}) }}>
         {/* Header */}
         <div style={styles.header}>
-          <span style={styles.headerGlyph}>⑂</span>
-          <span style={styles.headerTitle}>Compact &amp; Fork</span>
+          <span style={styles.headerGlyph}>{isFork ? "⑂" : "⊟"}</span>
+          <span style={styles.headerTitle}>{title}</span>
           {state !== "compacting" && (
             <button style={styles.closeBtn} onClick={onClose}>
               ✕
@@ -205,7 +219,7 @@ export function CompactForkModal({
                 Cancel
               </button>
               <button style={styles.confirmBtn} onClick={handleConfirm}>
-                ⑂ Compact &amp; Fork
+                {confirmLabel}
               </button>
             </div>
           </>
@@ -223,14 +237,18 @@ export function CompactForkModal({
         )}
 
         {/* ── Done ── */}
-        {state === "done" && forkId && completedEvent && (
+        {state === "done" && completedEvent && (
           <>
             <div style={styles.body}>
               {/* Header row */}
               <div style={styles.doneHeaderRow}>
                 <span style={styles.doneCheck}>✓</span>
                 <div>
-                  <div style={styles.doneTitle}>Fork {forkId.slice(0, 8)} ready</div>
+                  <div style={styles.doneTitle}>
+                    {isFork && forkId
+                      ? `Fork ${forkId.slice(0, 8)} ready`
+                      : "Context reclaimed"}
+                  </div>
                   <div style={styles.doneMeta}>
                     {completedEvent.files_written.length} file
                     {completedEvent.files_written.length !== 1 ? "s" : ""} written
@@ -275,7 +293,9 @@ export function CompactForkModal({
               </div>
 
               <div style={styles.hint}>
-                Open a new Claude session in this project to start with a clean context.
+                {isFork
+                  ? "Open a new Claude session in this project to start with a clean context."
+                  : "This session continues — its next start loads compact memory instead of raw history."}
               </div>
             </div>
 

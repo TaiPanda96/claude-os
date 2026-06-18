@@ -36,6 +36,7 @@ export function App() {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [memoryProjectId, setMemoryProjectId] = useState<string | null>(null);
   const [compactForkSessionId, setCompactForkSessionId] = useState<string | null>(null);
+  const [compactMode, setCompactMode] = useState<"fork" | "compact">("fork");
 
   const [error, setError] = useState<string | null>(null);
 
@@ -99,6 +100,16 @@ export function App() {
     } else {
       setSelectedId(id);
     }
+  }
+
+  function handleCompact(id: string) {
+    setCompactMode("compact");
+    setCompactForkSessionId(id);
+  }
+
+  function handleFork(id: string) {
+    setCompactMode("fork");
+    setCompactForkSessionId(id);
   }
 
   function handleSelectProject(projectId: string) {
@@ -207,7 +218,13 @@ export function App() {
           // session views, mounted as the two-pane layout they were built for.
           <div style={styles.tablePane}>
             <SessionList sessions={sessions} selected={selectedId} onSelect={handleSelect} />
-            <SessionTable sessions={sessions} selected={selectedId} onSelect={handleSelect} />
+            <SessionTable
+              sessions={sessions}
+              selected={selectedId}
+              onSelect={handleSelect}
+              onCompact={handleCompact}
+              onFork={handleFork}
+            />
           </div>
         ) : (
           <ProjectSessionTree
@@ -257,6 +274,7 @@ export function App() {
             model={compactForkSession.model}
             ctxPct={compactForkSession.current_ctx_pct ?? 0}
             ctxWindow={compactForkSession.ctx_window}
+            mode={compactMode}
             lastCompaction={
               compactForkSessionId === selectedId ? (detail?.lastCompaction ?? null) : null
             }
