@@ -69,7 +69,7 @@ export function SessionTable({ sessions, selected, onSelect, onCompact, onFork }
           ...(width ? { width } : {}),
           textAlign: align,
           cursor: "pointer",
-          color: active ? tokens.text : tokens.border,
+          color: active ? tokens.highlight : tokens.muted,
         }}
         onClick={() => handleSort(key)}
       >
@@ -259,25 +259,33 @@ const styles: Record<string, React.CSSProperties> = {
   },
   table: {
     width: "100%",
-    borderCollapse: "collapse",
+    // separate (not collapse) + zero spacing: under borderCollapse:collapse Chromium
+    // paints sticky <th> backgrounds transparently, letting scrolled rows bleed through.
+    borderCollapse: "separate",
+    borderSpacing: 0,
     tableLayout: "fixed",
   },
-  headerRow: {
-    borderBottom: `0.5px solid ${tokens.border}`,
-    position: "sticky",
-    top: 0,
-    background: tokens.headerRow,
-    zIndex: 1,
-  },
+  headerRow: {},
   th: {
-    padding: "10px 16px",
+    // Sticky lives on the cells, not the <tr>/<thead> — with borderCollapse:collapse
+    // Chromium drops sticky on row/section elements, so per-cell is the reliable path.
+    position: "sticky" as const,
+    top: 0,
+    zIndex: 2,
+    padding: "11px 16px",
     fontSize: tokens.fsMicro,
-    fontWeight: 500,
-    letterSpacing: "0.06em",
+    fontWeight: 600,
+    letterSpacing: "0.08em",
     textTransform: "uppercase" as const,
-    color: tokens.border,
+    color: tokens.muted,
     fontFamily: tokens.fontMono,
     userSelect: "none" as const,
+    // Solid, distinct fill (not surface1, which sits on top of the row/void color
+    // and reads as see-through) so scrolled rows can't bleed through the sticky cell.
+    background: tokens.surface2,
+    // boxShadow draws the divider instead of border — a collapsed border would
+    // scroll out from under the sticky cell, leaving the header floating bare.
+    boxShadow: `inset 0 -1px 0 ${tokens.border}`,
   },
   row: {
     borderBottom: `0.5px solid ${tokens.surface1}`,
