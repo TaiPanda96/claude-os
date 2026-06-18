@@ -9,8 +9,10 @@ export {
 export {
   computeGCState,
   MODEL_CONTEXT_WINDOWS,
+  CONTEXT_WINDOW_TIERS,
   GC_THRESHOLDS,
 } from "./types.js";
+export { resolveContextWindow } from "./domain/resolve-context-window.js";
 export type {
   Session,
   Turn,
