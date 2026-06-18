@@ -280,7 +280,9 @@ const styles: Record<string, React.CSSProperties> = {
     color: tokens.muted,
     fontFamily: tokens.fontMono,
     userSelect: "none" as const,
-    background: tokens.surface1,
+    // Solid, distinct fill (not surface1, which sits on top of the row/void color
+    // and reads as see-through) so scrolled rows can't bleed through the sticky cell.
+    background: tokens.surface2,
     // boxShadow draws the divider instead of border — a collapsed border would
     // scroll out from under the sticky cell, leaving the header floating bare.
     boxShadow: `inset 0 -1px 0 ${tokens.border}`,
