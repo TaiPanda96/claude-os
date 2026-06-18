@@ -1,6 +1,6 @@
 # Claude OS
 
-> A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state tracking — before quality degrades.
+> The control plane for your Claude fleet. Real-time token economics, context-window health, and GC state across every session and project — surfacing what's degrading, what's idle, and what it's costing you, before quality degrades.
 
 ![Phase](https://img.shields.io/badge/phase-4%20%E2%80%94%20policy%20UI-34c759?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
@@ -16,6 +16,18 @@ Every Claude session has a **context efficiency curve**. In the early portion of
 This is the **garbage threshold**. It's currently invisible to users.
 
 Claude OS makes it visible, measurable, and actionable.
+
+---
+
+## What Claude OS is — and isn't
+
+Claude OS is the **control plane for your Claude fleet**. It observes cost, context, and quality across *every* session and project, then acts on the ones that need it — reclaiming idle context, persisting memory — before quality degrades. The loop is **observe → decide → act → verify**, at fleet altitude.
+
+It is **not** a competitor to Claude Code's in-session features. `/compact` is Anthropic's primitive and owns single-session, in-the-moment token relief — Claude OS *drives* it, it never reimplements it. The line we hold for the life of this project:
+
+> Single-session compaction is table stakes. The product is **cross-session, idle, policy-driven, cost-aware** reclamation — the thing an in-loop command structurally can't do.
+
+When the platform's primitives get better, Claude OS gets better with them. The moat was never the compaction call; it's the economics and decision layer wrapped around a whole fleet of sessions.
 
 ---
 
@@ -177,6 +189,7 @@ outcomes(id, session_id, label, resolved, resolved_at)
 - [ ] User-configurable outcome definitions per session type
 - [ ] Cost-per-outcome reporting (API spend / resolved outcomes)
 - [ ] Stalled session detection + escalation
+- [ ] Fleet reclamation — dispatch native `/compact` across idle, policy-selected sessions (Claude OS as actuator, **not** a `/compact` reimplementation)
 
 ### Phase 5 — Public Release
 - [ ] MCP server — Claude reads its own context health in real time
