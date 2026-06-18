@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { SessionRow, Project, GCState, gcState } from "../types.js";
 import { tokens, gc } from "../theme.js";
+import { ActionOverflow, OverflowAction } from "./action-overflow.js";
 
 type ViewMode = "project" | "session";
 
@@ -223,24 +224,11 @@ export function ProjectSessionTree({
 
             {/* Policy banner — project-level, always visible (distinct from sessions) */}
             {group.id && project && (
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <PolicyBanner
-                  project={project}
-                  onEdit={() => onSelectProject(group.id!)}
-                />
-                {onViewMemory && (
-                  <button
-                    style={styles.memoryBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onViewMemory(group.id!);
-                    }}
-                    title="View memory artifacts"
-                  >
-                    ◈ Memory
-                  </button>
-                )}
-              </div>
+              <PolicyBanner
+                project={project}
+                onEdit={() => onSelectProject(group.id!)}
+                {...(onViewMemory ? { onViewMemory: () => onViewMemory(group.id!) } : {})}
+              />
             )}
 
             {/* Session rows */}
@@ -299,9 +287,11 @@ export function ProjectSessionTree({
 function PolicyBanner({
   project,
   onEdit,
+  onViewMemory,
 }: {
   project: Project | null;
   onEdit: () => void;
+  onViewMemory?: () => void;
 }) {
   const hasPolicy = project?.has_policy === 1;
   const isActive = project?.policy_active === 1;
@@ -311,6 +301,40 @@ function PolicyBanner({
     : isActive
       ? { dot: gc.clean.dot, text: gc.clean.text, label: `Policy active${project?.policy_name ? ` · ${project.policy_name}` : ""}` }
       : { dot: gc.soft_gc.dot, text: gc.soft_gc.text, label: `Policy paused${project?.policy_name ? ` · ${project.policy_name}` : ""}` };
+
+  // Per-project overflow — same kebab pattern as session rows, so project-level
+  // actions live in one consistent place. Policy stays a prominent CTA too, since
+  // configuring it is the headline action we deliberately keep discoverable.
+  const actions: OverflowAction[] = [
+    {
+      key: "policy",
+      glyph: "◆",
+      label: hasPolicy ? "Edit Policy" : "Configure Policy",
+      description: hasPolicy
+        ? "Adjust compaction triggers & model"
+        : "Set compaction triggers for this project",
+      onSelect: onEdit,
+    },
+    ...(onViewMemory
+      ? [
+          {
+            key: "memory",
+            glyph: "◈",
+            label: "Peer into Memory",
+            description: "Inspect memory artifacts & compaction history",
+            onSelect: onViewMemory,
+          } satisfies OverflowAction,
+        ]
+      : []),
+    {
+      key: "optimize",
+      glyph: "⊟",
+      label: "Optimize Context Window",
+      description: "Automatically compact the active window",
+      disabled: true,
+      badge: "Soon",
+    },
+  ];
 
   return (
     <div style={styles.policyBanner}>
@@ -322,14 +346,7 @@ function PolicyBanner({
         <button style={styles.editPolicyBtn} onClick={onEdit}>
           {hasPolicy ? "Edit Policy" : "Configure Policy"}
         </button>
-        {/* Placeholder — context-window optimisation lands in a later phase */}
-        <button
-          style={styles.optimizeBtn}
-          disabled
-          title="Coming soon — automatically compact the active context window"
-        >
-          Optimize Context Window
-        </button>
+        <ActionOverflow actions={actions} ariaLabel="Project actions" />
       </div>
     </div>
   );
@@ -542,23 +559,10 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "7px 0 7px 0",
+    padding: "7px 12px 7px 0",
     background: tokens.void,
     borderBottom: `0.5px solid ${tokens.surface1}`,
     minHeight: 34,
-    flex: 1,
-  },
-  memoryBtn: {
-    background: "transparent",
-    border: `0.5px solid ${tokens.border}`,
-    borderRadius: 3,
-    color: tokens.muted,
-    cursor: "pointer",
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    padding: "2px 6px",
-    flexShrink: 0,
-    marginRight: 12,
   },
   policyStatusDot: {
     width: 6,
@@ -593,19 +597,6 @@ const styles: Record<string, React.CSSProperties> = {
     cursor: "pointer",
     padding: "4px 10px",
     lineHeight: 1,
-  },
-  optimizeBtn: {
-    background: "transparent",
-    border: `0.5px dashed ${tokens.surface2}`,
-    borderRadius: tokens.radiusSm,
-    color: tokens.muted,
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    letterSpacing: "0.03em",
-    cursor: "not-allowed",
-    padding: "4px 10px",
-    lineHeight: 1,
-    opacity: 0.55,
   },
   // Flat-list header for session view
   flatHeader: {

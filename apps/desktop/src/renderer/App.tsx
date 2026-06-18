@@ -116,7 +116,17 @@ export function App() {
     setSelectedId(null);
     setDetail(null);
     setGcEvents([]);
+    setMemoryProjectId(null);
     setSelectedProjectId((prev) => (prev === projectId ? null : projectId));
+  }
+
+  function handleViewMemory(projectId: string) {
+    // Panels share the right-hand overlay slot — clear the others so they can't stack.
+    setSelectedId(null);
+    setDetail(null);
+    setGcEvents([]);
+    setSelectedProjectId(null);
+    setMemoryProjectId((prev) => (prev === projectId ? null : projectId));
   }
 
   const selected = sessions.find((s) => s.id === selectedId) ?? null;
@@ -235,6 +245,8 @@ export function App() {
             selected={selectedId}
             onSelect={handleSelect}
             onSelectProject={handleSelectProject}
+            onViewMemory={handleViewMemory}
+            onCompactFork={handleFork}
           />
         )}
 
