@@ -101,6 +101,11 @@ export interface SessionHealth {
   totalOutputTokens: number;
 }
 
+// Per-model *default* windows. NOTE: the active window is really a property of
+// the account plan, not the model — e.g. the Max plan lifts Opus/Sonnet from 200K
+// to 1M — and that fact is NOT recorded in the session JSONL (the model is logged
+// as "claude-opus-4-8", never "claude-opus-4-8[1m]"). Treat these as a fallback;
+// resolveContextWindow() layers an env override and an empirical floor on top.
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "claude-opus-4-8": 200_000,
   "claude-opus-4-7": 200_000,
@@ -109,6 +114,11 @@ export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
   "claude-3-5-sonnet-20241022": 200_000,
   "claude-3-5-haiku-20241022": 200_000,
 };
+
+// Known context-window tiers in ascending order. Used as the empirical floor:
+// observed effective-input tokens prove a lower bound on the window, so we round
+// up to the smallest tier that fits. See resolveContextWindow().
+export const CONTEXT_WINDOW_TIERS = [200_000, 1_000_000] as const;
 
 export interface AssistantRecord {
   type: "assistant";

@@ -1,4 +1,5 @@
 import { Database } from "bun:sqlite";
+import { resolveContextWindow } from "../domain/resolve-context-window.js";
 
 /**
  * Migration runner following SQLite best practices:
@@ -155,6 +156,39 @@ const MIGRATIONS: Migration[] = [
       db.run(
         `ALTER TABLE compaction_events ADD COLUMN output_size_tokens INTEGER NOT NULL DEFAULT 0`,
       );
+    },
+  },
+  {
+    id: 5,
+    name: "v5_recompute_ctx_pct_for_real_window",
+    run(db) {
+      // Earlier ingests assumed a static 200K window for every model, so on the Max
+      // plan (Opus/Sonnet = 1M) large sessions were pinned to a false 100% ctx_pct.
+      // Recompute in place from the stored effective-input tokens against the window
+      // resolved per session from its peak usage — the same empirical floor used at
+      // ingest. We update only rows with effective_input_tokens > 0; the handful of
+      // legacy rows that predate that column (value 0) are left untouched rather than
+      // zeroed out. NOTE: gc_events.ctx_pct_at_trigger is left as-is — that history is
+      // lossy (already clamped) and is only regenerated for newly ingested turns.
+      const sessions = db.prepare(`SELECT id, model FROM sessions`).all() as {
+        id: string;
+        model: string;
+      }[];
+      const maxStmt = db.prepare(
+        `SELECT MAX(effective_input_tokens) AS m FROM turns WHERE session_id = ?`,
+      );
+      const updTurns = db.prepare(
+        `UPDATE turns
+           SET ctx_pct = MIN(CAST(effective_input_tokens AS REAL) / ?, 1.0)
+         WHERE session_id = ? AND effective_input_tokens > 0`,
+      );
+      const updSession = db.prepare(`UPDATE sessions SET ctx_window = ? WHERE id = ?`);
+      for (const s of sessions) {
+        const observedMax = (maxStmt.get(s.id) as { m: number | null }).m ?? 0;
+        const window = resolveContextWindow(s.model, observedMax);
+        updTurns.run(window, s.id);
+        updSession.run(window, s.id);
+      }
     },
   },
 ];

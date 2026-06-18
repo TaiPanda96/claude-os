@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { basename } from "node:path";
-import { AssistantRecord, MODEL_CONTEXT_WINDOWS, UserRecord, Database, GCState } from "../types.js";
+import { AssistantRecord, UserRecord, Database, GCState } from "../types.js";
+import { resolveContextWindow } from "../domain/resolve-context-window.js";
 import { resolveProjectId, upsertSession } from "../db.js";
 import { computeTurnMetrics, recordTurn } from "./record-turn.js";
 import { PRICING_VERSION } from "../pricing.js";
@@ -63,7 +64,15 @@ export function ingestJsonLFile(
     turns.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
     const model = turns[0]?.message.model ?? "claude-sonnet-4-6";
-    const ctxWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200_000;
+    // Resolve the window once per session from peak observed usage so every turn
+    // is measured against the same (plan-correct) window. See resolveContextWindow.
+    const maxEffectiveInput = turns.reduce((max, t) => {
+      const u = t.message.usage;
+      const eff =
+        u.input_tokens + (u.cache_read_input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0);
+      return Math.max(max, eff);
+    }, 0);
+    const ctxWindow = resolveContextWindow(model, maxEffectiveInput);
     const createdAt = new Date(turns[0]?.timestamp ?? Date.now()).getTime();
     const lastActiveAt = new Date(turns[turns.length - 1]?.timestamp ?? Date.now()).getTime();
     const cwd = turns[0]?.cwd ?? "";
@@ -119,7 +128,7 @@ export function ingestJsonLFile(
         model,
         cwd,
         pricingVersion: PRICING_VERSION,
-      });
+      }, ctxWindow);
 
       const { inserted, gcState } = recordTurn(db, turn, prevGCState);
       if (inserted) {

@@ -1,5 +1,6 @@
 import type { Database, Turn, GCState } from "../types.js";
-import { computeGCState, MODEL_CONTEXT_WINDOWS } from "../types.js";
+import { computeGCState } from "../types.js";
+import { resolveContextWindow } from "../domain/resolve-context-window.js";
 import { bigramOverlap } from "../utils/bigram-overlap.js";
 import { countSelfCorrections } from "../utils/count-self-corrections.js";
 import { v4 as uuidv4 } from "uuid";
@@ -31,12 +32,16 @@ export interface RecordTurnResult {
   gcState: GCState;
 }
 
-/** Derives all Turn fields from raw input using the canonical metric definitions. */
-export function computeTurnMetrics(input: RawTurnInput): Turn {
-  const ctxWindow = MODEL_CONTEXT_WINDOWS[input.model] ?? 200_000;
+/** Derives all Turn fields from raw input using the canonical metric definitions.
+ *  Callers that know the session-level window (resolved from the session's max
+ *  observed usage) pass it as `sessionCtxWindow` so every turn in a session is
+ *  measured against the same window; otherwise it's resolved per turn. */
+export function computeTurnMetrics(input: RawTurnInput, sessionCtxWindow?: number): Turn {
   const effectiveInput = input.inputTokens + input.cacheReadTokens + input.cacheCreationTokens;
+  const ctxWindow = sessionCtxWindow ?? resolveContextWindow(input.model, effectiveInput);
   const cumulativeTokens = effectiveInput + input.outputTokens;
-  // Clamp: values >1 mean the model window is unknown (defaults to 200k) but real window is larger
+  // Window is plan-dependent and absent from the JSONL; resolveContextWindow floors
+  // it by observed usage, so this clamp is now only a defensive guard.
   const ctxPct = Math.min(effectiveInput / ctxWindow, 1.0);
   const outputDensity = effectiveInput > 0 ? input.outputTokens / effectiveInput : 0;
 

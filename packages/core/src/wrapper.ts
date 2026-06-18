@@ -9,7 +9,8 @@ import {
   closeSession,
   resolveProjectId,
 } from "./db.js";
-import { computeGCState, MODEL_CONTEXT_WINDOWS } from "./types.js";
+import { computeGCState } from "./types.js";
+import { resolveContextWindow } from "./domain/resolve-context-window.js";
 import { evaluateCompactionTriggers } from "./evaluate-compaction-triggers.js";
 import type { Session, GCState } from "./types.js";
 import { computeTurnMetrics, recordTurn } from "./ingest/record-turn.js";
@@ -64,6 +65,9 @@ export function createInstrumentedClient(
   let lastGCState: GCState = "clean";
   let lastOutputText = "";
   let sessionModel = "claude-sonnet-4-6";
+  // Peak effective-input seen this session — floors the resolved context window so
+  // it never drops below proven usage even after a compaction shrinks the live context.
+  let maxEffectiveInput = 0;
 
   async function create(
     params: MessageCreateParamsNonStreaming,
@@ -71,7 +75,7 @@ export function createInstrumentedClient(
   ): Promise<Anthropic.Message> {
     const model = params.model;
     sessionModel = model;
-    const ctxWindow = MODEL_CONTEXT_WINDOWS[model] ?? 200_000;
+    const ctxWindow = resolveContextWindow(model, maxEffectiveInput);
 
     if (turnIndex === 0) {
       const cwd = options.cwd ?? process.cwd();
@@ -99,6 +103,7 @@ export function createInstrumentedClient(
     const usage = response.usage as AnthropicUsage;
     const cacheReadTokens = usage.cache_read_input_tokens ?? 0;
     const cacheCreationTokens = usage.cache_creation_input_tokens ?? 0;
+    maxEffectiveInput = Math.max(maxEffectiveInput, input_tokens + cacheReadTokens + cacheCreationTokens);
 
     const outputText = response.content
       .filter((b) => b.type === "text")
@@ -120,7 +125,7 @@ export function createInstrumentedClient(
       model,
       cwd: options.cwd ?? process.cwd(),
       pricingVersion: "claude-sonnet-4-6", // for future-proofing; currently all models use the same pricing
-    });
+    }, resolveContextWindow(model, maxEffectiveInput));
 
     const { gcState, gcTransitioned } = recordTurn(db, turn, lastGCState);
     updateSessionLastActive(db, sessionId);
@@ -180,7 +185,6 @@ export function createInstrumentedClient(
     messages: { create },
     sessionId,
     getHealth: () => {
-      const ctxWindow = MODEL_CONTEXT_WINDOWS[sessionModel] ?? 200_000;
       const lastTurn = db
         .prepare(
           `SELECT ctx_pct, turn_index FROM turns WHERE session_id = $id ORDER BY turn_index DESC LIMIT 1`,
