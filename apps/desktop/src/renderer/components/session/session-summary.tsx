@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
-import { Turn, GCEvent, GC_TEXT } from "../types.js";
-import { computeQuality, sessionSummaryStats } from "../quality.js";
-import { tokens } from "../theme.js";
+import { Turn, GCEvent, GC_TEXT } from "../../types.js";
+import { computeQuality, sessionSummaryStats } from "../../quality.js";
+import { tokens } from "../../theme.js";
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
@@ -50,19 +50,13 @@ export function SessionSummary({ turns, gcEvents }: Props) {
     const firstEvent = gcEvents[0] ?? null;
     return sessionSummaryStats(
       points,
-      firstEvent
-        ? Math.min(Math.round(firstEvent.ctx_pct_at_trigger * 1000) / 10, 100)
-        : null,
+      firstEvent ? Math.min(Math.round(firstEvent.ctx_pct_at_trigger * 1000) / 10, 100) : null,
       firstEvent?.gc_type ?? null,
     );
   }, [turns, gcEvents]);
 
   const trendSymbol =
-    stats.recentTrend === "rising"
-      ? "↑"
-      : stats.recentTrend === "declining"
-        ? "↓"
-        : "→";
+    stats.recentTrend === "rising" ? "↑" : stats.recentTrend === "declining" ? "↓" : "→";
   const trendColor =
     stats.recentTrend === "rising"
       ? GC_TEXT.clean
@@ -94,10 +88,7 @@ export function SessionSummary({ turns, gcEvents }: Props) {
           ? `${Math.min(stats.inflectionCtxPct, 100).toFixed(1)}% ctx`
           : "none detected",
       color: stats.inflectionCtxPct != null ? GC_TEXT.soft_gc : tokens.muted,
-      sub:
-        stats.inflectionCtxPct != null
-          ? "sustained quality drop"
-          : "quality held throughout",
+      sub: stats.inflectionCtxPct != null ? "sustained quality drop" : "quality held throughout",
     },
     {
       label: "First GC crossing",
@@ -149,11 +140,7 @@ export function SessionSummary({ turns, gcEvents }: Props) {
       {items.map((item) => (
         <div key={item.label} style={styles.stat}>
           <div style={styles.label}>{item.label}</div>
-          <div
-            style={{ ...styles.value, color: item.color ?? tokens.highlight }}
-          >
-            {item.value}
-          </div>
+          <div style={{ ...styles.value, color: item.color ?? tokens.highlight }}>{item.value}</div>
           {item.sub && <div style={styles.sub}>{item.sub}</div>}
         </div>
       ))}

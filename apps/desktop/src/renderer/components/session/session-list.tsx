@@ -1,12 +1,130 @@
 import React, { useState } from "react";
-import { SessionRow, GC_COLOR, gcState } from "../types.js";
+import { SessionRow, GC_COLOR, gcState } from "../../types.js";
 
 type ViewMode = "project" | "turns" | "ctx_pct" | "cost";
 
-interface Props {
+interface SessionListProps {
   sessions: SessionRow[];
   selected: string | null;
   onSelect: (id: string) => void;
+}
+
+export function SessionList({ sessions, selected, onSelect }: SessionListProps) {
+  const [view, setView] = useState<ViewMode>("project");
+  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
+
+  function toggleGroup(key: string) {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }
+
+  // ── Sorted / grouped lists ─────────────────────────────────────────────────
+
+  const byTurns = [...sessions].sort((a, b) => b.turn_count - a.turn_count);
+
+  const byCtx = [...sessions].sort((a, b) => (b.current_ctx_pct ?? 0) - (a.current_ctx_pct ?? 0));
+
+  const byCost = [...sessions].sort((a, b) => b.cost_usd - a.cost_usd);
+
+  // Group by name (project = cwd basename). Ungrouped = "unnamed"
+  const projectGroups: Map<string, SessionRow[]> = new Map();
+  for (const s of sessions) {
+    const key = s.name ?? "unnamed";
+    const arr = projectGroups.get(key) ?? [];
+    arr.push(s);
+    projectGroups.set(key, arr);
+  }
+  // Sort groups by max ctx_pct descending
+  const sortedGroups = [...projectGroups.entries()].sort(
+    ([, a], [, b]) =>
+      Math.max(...b.map((s) => s.current_ctx_pct ?? 0)) -
+      Math.max(...a.map((s) => s.current_ctx_pct ?? 0)),
+  );
+
+  // ── Render ─────────────────────────────────────────────────────────────────
+
+  function renderFlat(list: SessionRow[], rankLabel: (s: SessionRow, i: number) => string) {
+    return list.map((s, i) => (
+      <div key={s.id} style={sessionItemStyles.rankedRow}>
+        <span style={sessionItemStyles.rank}>{rankLabel(s, i)}</span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <SessionItem s={s} selected={selected} onSelect={onSelect} />
+        </div>
+      </div>
+    ));
+  }
+
+  return (
+    <div style={sessionItemStyles.container}>
+      {/* Header + view switcher */}
+      <div style={sessionItemStyles.header}>
+        <span style={sessionItemStyles.headerLabel}>Sessions</span>
+        <div style={sessionItemStyles.tabs}>
+          {(["project", "turns", "ctx_pct", "cost"] as ViewMode[]).map((v) => (
+            <button
+              key={v}
+              style={{
+                ...sessionItemStyles.tab,
+                ...(view === v ? sessionItemStyles.tabActive : {}),
+              }}
+              onClick={() => setView(v)}
+            >
+              {v === "project"
+                ? "project"
+                : v === "turns"
+                  ? "turns"
+                  : v === "ctx_pct"
+                    ? "ctx%"
+                    : "cost"}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {sessions.length === 0 && (
+        <div style={sessionItemStyles.empty}>No sessions — run bun run ingest</div>
+      )}
+
+      {/* Project tree view */}
+      {view === "project" &&
+        sortedGroups.map(([groupName, groupSessions]) => {
+          const isOpen = openGroups.has(groupName);
+          const maxCtx = Math.max(...groupSessions.map((s) => s.current_ctx_pct ?? 0));
+          const totalCost = groupSessions.reduce((sum, s) => sum + s.cost_usd, 0);
+          const costFallback = groupSessions.some((s) => s.pricing_fallback);
+          return (
+            <div key={groupName}>
+              <GroupHeader
+                label={groupName}
+                count={groupSessions.length}
+                maxCtxPct={maxCtx}
+                totalCost={totalCost}
+                costFallback={costFallback}
+                open={isOpen}
+                onToggle={() => toggleGroup(groupName)}
+              />
+              {isOpen &&
+                groupSessions.map((s) => (
+                  <SessionItem key={s.id} s={s} selected={selected} onSelect={onSelect} indent />
+                ))}
+            </div>
+          );
+        })}
+
+      {/* Sorted by turns */}
+      {view === "turns" && renderFlat(byTurns, (_, i) => `#${i + 1}`)}
+
+      {/* Ranked by ctx% */}
+      {view === "ctx_pct" &&
+        renderFlat(byCtx, (s) => `${((s.current_ctx_pct ?? 0) * 100).toFixed(0)}%`)}
+
+      {/* Ranked by cost — dollar amount shows per-row in the meta line */}
+      {view === "cost" && renderFlat(byCost, (_, i) => `#${i + 1}`)}
+    </div>
+  );
 }
 
 function SessionItem({
@@ -28,29 +146,29 @@ function SessionItem({
   return (
     <button
       style={{
-        ...styles.row,
-        ...(isSelected ? styles.rowSelected : {}),
+        ...sessionItemStyles.row,
+        ...(isSelected ? sessionItemStyles.rowSelected : {}),
         paddingLeft: indent ? 24 : 14,
       }}
       onClick={() => onSelect(s.id)}
     >
-      <div style={styles.rowTop}>
-        <span style={{ ...styles.dot, background: color }} />
-        <span style={styles.name}>{s.name ?? "unnamed"}</span>
-        <span style={{ ...styles.pct, color }}>{(pct * 100).toFixed(0)}%</span>
+      <div style={sessionItemStyles.rowTop}>
+        <span style={{ ...sessionItemStyles.dot, background: color }} />
+        <span style={sessionItemStyles.name}>{s.name ?? "unnamed"}</span>
+        <span style={{ ...sessionItemStyles.pct, color }}>{(pct * 100).toFixed(0)}%</span>
       </div>
-      <div style={styles.rowBottom}>
-        <span style={styles.meta}>
+      <div style={sessionItemStyles.rowBottom}>
+        <span style={sessionItemStyles.meta}>
           {s.turn_count} turns · {s.model.replace("claude-", "")}
         </span>
-        <span style={styles.metaCost}>
+        <span style={sessionItemStyles.metaCost}>
           {s.pricing_fallback ? "~" : ""}${s.cost_usd.toFixed(2)}
         </span>
       </div>
-      <div style={styles.track}>
+      <div style={sessionItemStyles.track}>
         <div
           style={{
-            ...styles.fill,
+            ...sessionItemStyles.fill,
             width: `${Math.min(pct * 100, 100)}%`,
             background: color,
           }}
@@ -80,152 +198,19 @@ function GroupHeader({
   const state = gcState(maxCtxPct);
   const color = GC_COLOR[state];
   return (
-    <button style={styles.groupHeader} onClick={onToggle}>
-      <span style={styles.chevron}>{open ? "▾" : "▸"}</span>
-      <span style={styles.groupName}>{label}</span>
-      <span style={styles.groupMeta}>{count}</span>
-      <span style={styles.groupCost}>
+    <button style={sessionItemStyles.groupHeader} onClick={onToggle}>
+      <span style={sessionItemStyles.chevron}>{open ? "▾" : "▸"}</span>
+      <span style={sessionItemStyles.groupName}>{label}</span>
+      <span style={sessionItemStyles.groupMeta}>{count}</span>
+      <span style={sessionItemStyles.groupCost}>
         {costFallback ? "~" : ""}${totalCost.toFixed(2)}
       </span>
-      <span style={{ ...styles.groupPct, color }}>
-        {(maxCtxPct * 100).toFixed(0)}%
-      </span>
+      <span style={{ ...sessionItemStyles.groupPct, color }}>{(maxCtxPct * 100).toFixed(0)}%</span>
     </button>
   );
 }
 
-export function SessionList({ sessions, selected, onSelect }: Props) {
-  const [view, setView] = useState<ViewMode>("project");
-  const [openGroups, setOpenGroups] = useState<Set<string>>(new Set());
-
-  function toggleGroup(key: string) {
-    setOpenGroups((prev) => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }
-
-  // ── Sorted / grouped lists ─────────────────────────────────────────────────
-
-  const byTurns = [...sessions].sort((a, b) => b.turn_count - a.turn_count);
-
-  const byCtx = [...sessions].sort(
-    (a, b) => (b.current_ctx_pct ?? 0) - (a.current_ctx_pct ?? 0),
-  );
-
-  const byCost = [...sessions].sort((a, b) => b.cost_usd - a.cost_usd);
-
-  // Group by name (project = cwd basename). Ungrouped = "unnamed"
-  const projectGroups: Map<string, SessionRow[]> = new Map();
-  for (const s of sessions) {
-    const key = s.name ?? "unnamed";
-    const arr = projectGroups.get(key) ?? [];
-    arr.push(s);
-    projectGroups.set(key, arr);
-  }
-  // Sort groups by max ctx_pct descending
-  const sortedGroups = [...projectGroups.entries()].sort(
-    ([, a], [, b]) =>
-      Math.max(...b.map((s) => s.current_ctx_pct ?? 0)) -
-      Math.max(...a.map((s) => s.current_ctx_pct ?? 0)),
-  );
-
-  // ── Render ─────────────────────────────────────────────────────────────────
-
-  function renderFlat(
-    list: SessionRow[],
-    rankLabel: (s: SessionRow, i: number) => string,
-  ) {
-    return list.map((s, i) => (
-      <div key={s.id} style={styles.rankedRow}>
-        <span style={styles.rank}>{rankLabel(s, i)}</span>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <SessionItem s={s} selected={selected} onSelect={onSelect} />
-        </div>
-      </div>
-    ));
-  }
-
-  return (
-    <div style={styles.container}>
-      {/* Header + view switcher */}
-      <div style={styles.header}>
-        <span style={styles.headerLabel}>Sessions</span>
-        <div style={styles.tabs}>
-          {(["project", "turns", "ctx_pct", "cost"] as ViewMode[]).map((v) => (
-            <button
-              key={v}
-              style={{ ...styles.tab, ...(view === v ? styles.tabActive : {}) }}
-              onClick={() => setView(v)}
-            >
-              {v === "project"
-                ? "project"
-                : v === "turns"
-                  ? "turns"
-                  : v === "ctx_pct"
-                    ? "ctx%"
-                    : "cost"}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {sessions.length === 0 && (
-        <div style={styles.empty}>No sessions — run bun run ingest</div>
-      )}
-
-      {/* Project tree view */}
-      {view === "project" &&
-        sortedGroups.map(([groupName, groupSessions]) => {
-          const isOpen = openGroups.has(groupName);
-          const maxCtx = Math.max(
-            ...groupSessions.map((s) => s.current_ctx_pct ?? 0),
-          );
-          const totalCost = groupSessions.reduce((sum, s) => sum + s.cost_usd, 0);
-          const costFallback = groupSessions.some((s) => s.pricing_fallback);
-          return (
-            <div key={groupName}>
-              <GroupHeader
-                label={groupName}
-                count={groupSessions.length}
-                maxCtxPct={maxCtx}
-                totalCost={totalCost}
-                costFallback={costFallback}
-                open={isOpen}
-                onToggle={() => toggleGroup(groupName)}
-              />
-              {isOpen &&
-                groupSessions.map((s) => (
-                  <SessionItem
-                    key={s.id}
-                    s={s}
-                    selected={selected}
-                    onSelect={onSelect}
-                    indent
-                  />
-                ))}
-            </div>
-          );
-        })}
-
-      {/* Sorted by turns */}
-      {view === "turns" && renderFlat(byTurns, (_, i) => `#${i + 1}`)}
-
-      {/* Ranked by ctx% */}
-      {view === "ctx_pct" &&
-        renderFlat(
-          byCtx,
-          (s) => `${((s.current_ctx_pct ?? 0) * 100).toFixed(0)}%`,
-        )}
-
-      {/* Ranked by cost — dollar amount shows per-row in the meta line */}
-      {view === "cost" && renderFlat(byCost, (_, i) => `#${i + 1}`)}
-    </div>
-  );
-}
-
-const styles: Record<string, React.CSSProperties> = {
+const sessionItemStyles: Record<string, React.CSSProperties> = {
   container: {
     width: 240,
     borderRight: "1px solid #2c2c2e",

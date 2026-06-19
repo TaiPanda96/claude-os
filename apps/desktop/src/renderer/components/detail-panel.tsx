@@ -2,8 +2,8 @@ import React, { useState, useRef, useCallback } from "react";
 import { SessionRow, GCEvent, GC_TEXT, gcState } from "../types.js";
 import { SessionDetail } from "../types.js";
 import { EfficiencyCurve } from "./efficiency-curve.js";
-import { SessionSummary } from "./session-summary.js";
 import { tokens } from "../theme.js";
+import { SessionSummary } from "./session/session-summary.js";
 
 interface Props {
   session: SessionRow;
@@ -39,12 +39,7 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
       const onMove = (mv: MouseEvent) => {
         if (!dragStart.current) return;
         const delta = dragStart.current.y - mv.clientY;
-        setHeight(
-          Math.min(
-            MAX_HEIGHT,
-            Math.max(MIN_HEIGHT, dragStart.current.h + delta),
-          ),
-        );
+        setHeight(Math.min(MAX_HEIGHT, Math.max(MIN_HEIGHT, dragStart.current.h + delta)));
       };
       const onUp = () => {
         dragStart.current = null;

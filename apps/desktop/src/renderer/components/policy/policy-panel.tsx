@@ -1,12 +1,6 @@
 import React, { useEffect, useState } from "react";
-import {
-  CompactionPolicy,
-  TriggerConfig,
-  TriggerType,
-  MemoryFile,
-  SERVER,
-} from "../types.js";
-import { tokens, gc } from "../theme.js";
+import { CompactionPolicy, TriggerConfig, TriggerType, MemoryFile, SERVER } from "../../types.js";
+import { tokens, gc } from "../../theme.js";
 
 interface Props {
   projectId: string;
@@ -122,7 +116,9 @@ export function PolicyPanel({ projectId, projectName, onClose }: Props) {
             <div style={styles.headerTitle}>Compaction Policy</div>
             <div style={styles.headerSub}>{projectName}</div>
           </div>
-          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+          <button style={styles.closeBtn} onClick={onClose}>
+            ✕
+          </button>
         </div>
 
         <div style={styles.body}>
@@ -182,11 +178,17 @@ export function PolicyPanel({ projectId, projectName, onClose }: Props) {
                   onChange={(e) => setNewTriggerType(e.target.value as TriggerType)}
                 >
                   {(Object.keys(TRIGGER_LABELS) as TriggerType[]).map((t) => (
-                    <option key={t} value={t}>{TRIGGER_LABELS[t]}</option>
+                    <option key={t} value={t}>
+                      {TRIGGER_LABELS[t]}
+                    </option>
                   ))}
                 </select>
-                <button style={styles.confirmBtn} onClick={addTrigger}>Add</button>
-                <button style={styles.cancelBtn} onClick={() => setAddingTrigger(false)}>Cancel</button>
+                <button style={styles.confirmBtn} onClick={addTrigger}>
+                  Add
+                </button>
+                <button style={styles.cancelBtn} onClick={() => setAddingTrigger(false)}>
+                  Cancel
+                </button>
               </div>
             )}
 
@@ -195,7 +197,12 @@ export function PolicyPanel({ projectId, projectName, onClose }: Props) {
             )}
 
             {draft.triggers.map((t, i) => (
-              <TriggerRow key={i} trigger={t} onChange={(p) => updateTrigger(i, p)} onRemove={() => removeTrigger(i)} />
+              <TriggerRow
+                key={i}
+                trigger={t}
+                onChange={(p) => updateTrigger(i, p)}
+                onRemove={() => removeTrigger(i)}
+              />
             ))}
           </div>
 
@@ -203,7 +210,9 @@ export function PolicyPanel({ projectId, projectName, onClose }: Props) {
           <div style={styles.section}>
             <div style={styles.sectionHeader}>
               <span style={styles.sectionTitle}>Memory files</span>
-              <button style={styles.addBtn} onClick={addMemoryFile}>+ Add</button>
+              <button style={styles.addBtn} onClick={addMemoryFile}>
+                + Add
+              </button>
             </div>
 
             {draft.memory_schema.length === 0 && (
@@ -250,8 +259,12 @@ function TriggerRow({
   return (
     <div style={styles.triggerRow}>
       <div style={styles.triggerHeader}>
-        <span style={styles.triggerLabel}>{TRIGGER_LABELS[trigger.triggerType as TriggerType]}</span>
-        <button style={styles.removeBtn} onClick={onRemove}>✕</button>
+        <span style={styles.triggerLabel}>
+          {TRIGGER_LABELS[trigger.triggerType as TriggerType]}
+        </span>
+        <button style={styles.removeBtn} onClick={onRemove}>
+          ✕
+        </button>
       </div>
 
       {trigger.triggerType === "turn_cadence" && (
@@ -351,7 +364,9 @@ function MemoryFileRow({
     <div style={styles.triggerRow}>
       <div style={styles.triggerHeader}>
         <span style={styles.triggerLabel}>{file.filename || "untitled"}</span>
-        <button style={styles.removeBtn} onClick={onRemove}>✕</button>
+        <button style={styles.removeBtn} onClick={onRemove}>
+          ✕
+        </button>
       </div>
       <Field label="Filename">
         <input
@@ -408,11 +423,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 
 function defaultTrigger(type: TriggerType): TriggerConfig {
   switch (type) {
-    case "turn_cadence":         return { triggerType: "turn_cadence", every: 10 };
-    case "ctx_threshold":        return { triggerType: "ctx_threshold", pct: 70 };
-    case "architectural_decision": return { triggerType: "architectural_decision", min_ctx_pct: 20, min_turns: 5 };
-    case "outcome_resolved":     return { triggerType: "outcome_resolved", min_ctx_pct: 10, min_turns: 5 };
-    case "semantic_event":       return { triggerType: "semantic_event", classifier: "", min_ctx_pct: 20, min_turns: 5 };
+    case "turn_cadence":
+      return { triggerType: "turn_cadence", every: 10 };
+    case "ctx_threshold":
+      return { triggerType: "ctx_threshold", pct: 70 };
+    case "architectural_decision":
+      return { triggerType: "architectural_decision", min_ctx_pct: 20, min_turns: 5 };
+    case "outcome_resolved":
+      return { triggerType: "outcome_resolved", min_ctx_pct: 10, min_turns: 5 };
+    case "semantic_event":
+      return { triggerType: "semantic_event", classifier: "", min_ctx_pct: 20, min_turns: 5 };
   }
 }
 
