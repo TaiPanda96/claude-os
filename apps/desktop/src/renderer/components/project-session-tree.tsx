@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import { SessionRow, Project, GCState, gcState } from "../types.js";
 import { tokens, gc } from "../theme.js";
+import { ActionOverflow, OverflowAction } from "./action-overflow.js";
+import { policyOverflowAction } from "./policy-action.js";
 
 type ViewMode = "project" | "session";
 
@@ -13,6 +15,9 @@ interface Props {
   onSelect: (id: string) => void;
   onSelectProject: (projectId: string) => void;
   onViewMemory?: (projectId: string) => void;
+  /** Compact in place — prune destructively and continue. */
+  onCompact?: (id: string) => void;
+  /** Compact and fork — write memory.md and branch a fresh session. */
   onCompactFork?: (id: string) => void;
 }
 
@@ -60,6 +65,7 @@ export function ProjectSessionTree({
   onSelect,
   onSelectProject,
   onViewMemory,
+  onCompact,
   onCompactFork,
 }: Props) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -67,6 +73,18 @@ export function ProjectSessionTree({
 
   const cutoff = ttlDays > 0 ? Date.now() - ttlDays * 86_400_000 : 0;
   const projectById = new Map(projects.map((p) => [p.id, p]));
+
+  // Per-session action handlers shared across every SessionRowComponent call site;
+  // conditionally spread so an omitted optional prop stays absent (exactOptionalPropertyTypes).
+  const rowActionProps = {
+    ...(onCompact ? { onCompact } : {}),
+    ...(onCompactFork ? { onCompactFork } : {}),
+    onConfigurePolicy: onSelectProject,
+  };
+
+  function projectOf(s: SessionRow): Project | null {
+    return s.project_id ? projectById.get(s.project_id) ?? null : null;
+  }
 
   if (sessions.length === 0) {
     return (
@@ -100,9 +118,10 @@ export function ProjectSessionTree({
           <SessionRowComponent
             key={s.id}
             session={s}
+            project={projectOf(s)}
             isSelected={s.id === selected}
             onSelect={onSelect}
-            {...(onCompactFork ? { onCompactFork } : {})}
+            {...rowActionProps}
             showProject
           />
         ))}
@@ -127,9 +146,10 @@ export function ProjectSessionTree({
             <SessionRowComponent
               key={s.id}
               session={s}
+              project={projectOf(s)}
               isSelected={s.id === selected}
               onSelect={onSelect}
-              {...(onCompactFork ? { onCompactFork } : {})}
+              {...rowActionProps}
               showProject
               dimmed
             />
@@ -223,24 +243,11 @@ export function ProjectSessionTree({
 
             {/* Policy banner — project-level, always visible (distinct from sessions) */}
             {group.id && project && (
-              <div style={{ display: "flex", gap: 4, alignItems: "center" }}>
-                <PolicyBanner
-                  project={project}
-                  onEdit={() => onSelectProject(group.id!)}
-                />
-                {onViewMemory && (
-                  <button
-                    style={styles.memoryBtn}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onViewMemory(group.id!);
-                    }}
-                    title="View memory artifacts"
-                  >
-                    ◈ Memory
-                  </button>
-                )}
-              </div>
+              <PolicyBanner
+                project={project}
+                onConfigurePolicy={onSelectProject}
+                {...(onViewMemory ? { onViewMemory: () => onViewMemory(group.id!) } : {})}
+              />
             )}
 
             {/* Session rows */}
@@ -250,9 +257,10 @@ export function ProjectSessionTree({
                   <SessionRowComponent
                     key={s.id}
                     session={s}
+                    project={project}
                     isSelected={s.id === selected}
                     onSelect={onSelect}
-                    {...(onCompactFork ? { onCompactFork } : {})}
+                    {...rowActionProps}
                   />
                 ))}
 
@@ -276,9 +284,10 @@ export function ProjectSessionTree({
                     <SessionRowComponent
                       key={s.id}
                       session={s}
+                      project={project}
                       isSelected={s.id === selected}
                       onSelect={onSelect}
-                      {...(onCompactFork ? { onCompactFork } : {})}
+                      {...rowActionProps}
                       dimmed
                     />
                   ))}
@@ -298,19 +307,47 @@ export function ProjectSessionTree({
 
 function PolicyBanner({
   project,
-  onEdit,
+  onConfigurePolicy,
+  onViewMemory,
 }: {
-  project: Project | null;
-  onEdit: () => void;
+  project: Project;
+  onConfigurePolicy: (projectId: string) => void;
+  onViewMemory?: () => void;
 }) {
-  const hasPolicy = project?.has_policy === 1;
-  const isActive = project?.policy_active === 1;
+  const hasPolicy = project.has_policy === 1;
+  const isActive = project.policy_active === 1;
 
   const status = !hasPolicy
     ? { dot: tokens.muted, text: tokens.muted, label: "No policy configured" }
     : isActive
-      ? { dot: gc.clean.dot, text: gc.clean.text, label: `Policy active${project?.policy_name ? ` · ${project.policy_name}` : ""}` }
-      : { dot: gc.soft_gc.dot, text: gc.soft_gc.text, label: `Policy paused${project?.policy_name ? ` · ${project.policy_name}` : ""}` };
+      ? { dot: gc.clean.dot, text: gc.clean.text, label: `Policy active${project.policy_name ? ` · ${project.policy_name}` : ""}` }
+      : { dot: gc.soft_gc.dot, text: gc.soft_gc.text, label: `Policy paused${project.policy_name ? ` · ${project.policy_name}` : ""}` };
+
+  // Per-project overflow — same kebab pattern as session rows, so project-level
+  // actions live in one consistent place. Policy stays a prominent CTA too, since
+  // configuring it is the headline action we deliberately keep discoverable.
+  const actions: OverflowAction[] = [
+    policyOverflowAction(project, onConfigurePolicy),
+    ...(onViewMemory
+      ? [
+          {
+            key: "memory",
+            glyph: "◈",
+            label: "Peer into Memory",
+            description: "Inspect memory artifacts & compaction history",
+            onSelect: onViewMemory,
+          } satisfies OverflowAction,
+        ]
+      : []),
+    {
+      key: "optimize",
+      glyph: "⊟",
+      label: "Optimize Context Window",
+      description: "Automatically compact the active window",
+      disabled: true,
+      badge: "Soon",
+    },
+  ];
 
   return (
     <div style={styles.policyBanner}>
@@ -319,17 +356,10 @@ function PolicyBanner({
       <span style={{ ...styles.policyStatusText, color: status.text }}>{status.label}</span>
 
       <div style={styles.policyActions}>
-        <button style={styles.editPolicyBtn} onClick={onEdit}>
+        <button style={styles.editPolicyBtn} onClick={() => onConfigurePolicy(project.id)}>
           {hasPolicy ? "Edit Policy" : "Configure Policy"}
         </button>
-        {/* Placeholder — context-window optimisation lands in a later phase */}
-        <button
-          style={styles.optimizeBtn}
-          disabled
-          title="Coming soon — automatically compact the active context window"
-        >
-          Optimize Context Window
-        </button>
+        <ActionOverflow actions={actions} ariaLabel="Project actions" />
       </div>
     </div>
   );
@@ -339,24 +369,52 @@ function PolicyBanner({
 
 function SessionRowComponent({
   session: s,
+  project = null,
   isSelected,
   onSelect,
+  onCompact,
   onCompactFork,
+  onConfigurePolicy,
   showProject = false,
   dimmed = false,
 }: {
   session: SessionRow;
+  project?: Project | null;
   isSelected: boolean;
   onSelect: (id: string) => void;
+  onCompact?: (id: string) => void;
   onCompactFork?: (id: string) => void;
+  onConfigurePolicy?: (projectId: string) => void;
   showProject?: boolean;
   dimmed?: boolean;
 }) {
-  const [hovered, setHovered] = React.useState(false);
   const pct = s.current_ctx_pct ?? 0;
   const state = gcState(pct);
   const gcColors = gc[state];
-  const canFork = state === "soft_gc" || state === "hard_gc";
+  const hasTurns = s.turn_count > 0;
+
+  // Same overflow set as the table view, plus the project-scoped policy item, so
+  // policy is reachable from a session row in every view.
+  const actions: OverflowAction[] = [
+    {
+      key: "compact",
+      glyph: "⊟",
+      label: "Compact",
+      description: "Prune session destructively & continue",
+      danger: true,
+      disabled: !hasTurns,
+      ...(onCompact ? { onSelect: () => onCompact(s.id) } : {}),
+    },
+    {
+      key: "fork",
+      glyph: "⑂",
+      label: "Fork",
+      description: "Compact & update memory.md",
+      disabled: !hasTurns,
+      ...(onCompactFork ? { onSelect: () => onCompactFork(s.id) } : {}),
+    },
+    ...(onConfigurePolicy ? [policyOverflowAction(project, onConfigurePolicy)] : []),
+  ];
 
   return (
     <div
@@ -366,8 +424,6 @@ function SessionRowComponent({
         opacity: dimmed ? 0.45 : 1,
       }}
       onClick={() => onSelect(s.id)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
     >
       {/* Indent + dot */}
       <div style={styles.sessionLeft}>
@@ -419,32 +475,28 @@ function SessionRowComponent({
         {(Math.min(pct, 1) * 100).toFixed(0)}%
       </span>
 
-      {/* GC chip / Compact & Fork button on hover */}
-      {hovered && canFork && onCompactFork ? (
-        <button
-          style={styles.compactForkBtn}
-          onClick={(e) => {
-            e.stopPropagation();
-            onCompactFork(s.id);
-          }}
-        >
-          ⑂ Fork
-        </button>
-      ) : (
-        <span
-          style={{
-            ...styles.gcChip,
-            color: gcColors.text,
-            background: gcColors.bg,
-            border: `0.5px solid ${gcColors.border}`,
-          }}
-        >
-          {GC_LABEL[state]}
-        </span>
-      )}
+      {/* GC chip */}
+      <span
+        style={{
+          ...styles.gcChip,
+          color: gcColors.text,
+          background: gcColors.bg,
+          border: `0.5px solid ${gcColors.border}`,
+        }}
+      >
+        {GC_LABEL[state]}
+      </span>
 
       {/* Last active */}
       <span style={styles.time}>{relativeTime(s.last_active_at)}</span>
+
+      {/* Row actions — Compact / Fork / Configure Policy */}
+      <div style={styles.rowActions}>
+        <ActionOverflow
+          actions={actions}
+          ariaLabel={`Actions for ${s.name ?? s.id.slice(0, 6)}`}
+        />
+      </div>
     </div>
   );
 }
@@ -542,23 +594,10 @@ const styles: Record<string, React.CSSProperties> = {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "7px 0 7px 0",
+    padding: "7px 12px 7px 0",
     background: tokens.void,
     borderBottom: `0.5px solid ${tokens.surface1}`,
     minHeight: 34,
-    flex: 1,
-  },
-  memoryBtn: {
-    background: "transparent",
-    border: `0.5px solid ${tokens.border}`,
-    borderRadius: 3,
-    color: tokens.muted,
-    cursor: "pointer",
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    padding: "2px 6px",
-    flexShrink: 0,
-    marginRight: 12,
   },
   policyStatusDot: {
     width: 6,
@@ -594,19 +633,6 @@ const styles: Record<string, React.CSSProperties> = {
     padding: "4px 10px",
     lineHeight: 1,
   },
-  optimizeBtn: {
-    background: "transparent",
-    border: `0.5px dashed ${tokens.surface2}`,
-    borderRadius: tokens.radiusSm,
-    color: tokens.muted,
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    letterSpacing: "0.03em",
-    cursor: "not-allowed",
-    padding: "4px 10px",
-    lineHeight: 1,
-    opacity: 0.55,
-  },
   // Flat-list header for session view
   flatHeader: {
     display: "flex",
@@ -636,7 +662,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   sessionRow: {
     display: "grid",
-    gridTemplateColumns: "1fr 140px 48px 80px 72px",
+    gridTemplateColumns: "1fr 140px 48px 80px 72px 36px",
     alignItems: "center",
     gap: 12,
     padding: "10px 20px 10px 0",
@@ -758,17 +784,8 @@ const styles: Record<string, React.CSSProperties> = {
     opacity: 0.8,
     flexShrink: 0,
   },
-  compactForkBtn: {
-    background: gc.soft_gc.bg,
-    border: `1px solid ${gc.soft_gc.border}`,
-    borderRadius: tokens.radiusSm,
-    color: gc.soft_gc.text,
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    cursor: "pointer",
-    padding: "2px 7px",
-    fontWeight: 600,
-    letterSpacing: "0.02em",
-    flexShrink: 0,
+  rowActions: {
+    display: "flex",
+    justifyContent: "flex-end",
   },
 };

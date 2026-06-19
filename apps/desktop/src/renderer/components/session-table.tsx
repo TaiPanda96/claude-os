@@ -1,22 +1,36 @@
 import React, { useState } from "react";
-import { SessionRow, GC_COLOR, GC_TEXT, gcState } from "../types.js";
+import { SessionRow, Project, GC_COLOR, GC_TEXT, gcState } from "../types.js";
 import { tokens, gc } from "../theme.js";
 import { ActionOverflow, OverflowAction } from "./action-overflow.js";
+import { policyOverflowAction } from "./policy-action.js";
 
 type SortKey = "name" | "model" | "current_ctx_pct" | "cost_usd" | "turn_count";
 type SortDir = "asc" | "desc";
 
 interface Props {
   sessions: SessionRow[];
+  /** Projects, for resolving a session's policy state in the row overflow. */
+  projects: Project[];
   selected: string | null;
   onSelect: (id: string) => void;
   /** Compact in place — prune the session destructively and continue. */
   onCompact?: (id: string) => void;
   /** Compact and fork — write memory.md and branch a fresh session. */
   onFork?: (id: string) => void;
+  /** Open the policy panel for a session's project. */
+  onConfigurePolicy?: (projectId: string) => void;
 }
 
-export function SessionTable({ sessions, selected, onSelect, onCompact, onFork }: Props) {
+export function SessionTable({
+  sessions,
+  projects,
+  selected,
+  onSelect,
+  onCompact,
+  onFork,
+  onConfigurePolicy,
+}: Props) {
+  const projectById = new Map(projects.map((p) => [p.id, p]));
   const [sortKey, setSortKey] = useState<SortKey>("current_ctx_pct");
   const [sortDir, setSortDir] = useState<SortDir>("desc");
 
@@ -107,6 +121,7 @@ export function SessionTable({ sessions, selected, onSelect, onCompact, onFork }
             const rowClass = isHardGC ? "gc-row--hard_gc" : undefined;
 
             const hasTurns = s.turn_count > 0;
+            const project = s.project_id ? projectById.get(s.project_id) ?? null : null;
             const rowActions: OverflowAction[] = [
               {
                 key: "compact",
@@ -125,6 +140,7 @@ export function SessionTable({ sessions, selected, onSelect, onCompact, onFork }
                 disabled: !hasTurns,
                 onSelect: () => onFork?.(s.id),
               },
+              ...(onConfigurePolicy ? [policyOverflowAction(project, onConfigurePolicy)] : []),
               {
                 key: "knowledge-graph",
                 glyph: "◈",
