@@ -1,15 +1,28 @@
-import { MemoryFile, CompactionPolicy, TriggerTypeEnum } from "../../types.js";
+import { MemoryFile, CompactionPolicy, DecayScope, TriggerTypeEnum } from "../../types.js";
 import { memoryUpdateEnumType } from "./memory-schema.js";
+
+/**
+ * The retention horizon of a memory file, expressed to the summarizer as a
+ * durability bar: what content qualifies, at what abstraction level, and how
+ * conservative to be when retiring existing content on merge. (This is decay's
+ * *prompt* half only — actual eviction/lifecycle is a separate mechanism.)
+ */
+const DECAY_GUIDANCE: Record<DecayScope, string> = {
+  session: `DECAY: session — ephemeral working memory for the current session only. Capture concrete, in-flight detail (current task state, decisions in progress); do not generalize. When merging, freely drop state that is no longer current.`,
+  project: `DECAY: project — persists across sessions for the life of this project. Capture durable project knowledge (architecture, conventions, resolved decisions); omit session-only noise. When merging, retire content only once it is superseded or resolved.`,
+  permanent: `DECAY: permanent — never decays. Record only facts that remain true indefinitely (identity, standing preferences, invariants); strip session- and project-specific specifics and generalize. When merging, retire existing content only if it is now factually wrong, never merely because it is old.`,
+};
 
 /**
  * Builds a prompt instructing the LLM how to update a memory file based on a slice of session turns, according to the file's update mode and existing content.
  *
  * The prompt is framed with policy-level signal so the summarizer sees not just
  * the leaf file it's writing, but what the whole memory set is for (the policy
- * objective), why this run fired (the trigger), and which sibling files exist —
- * the inputs it needs to prioritize and route content correctly. That derivation
- * (objective framing, sibling routing list) lives here rather than at the call
- * site because it is prompt-shaping logic, not orchestration.
+ * objective), why this run fired (the trigger), which sibling files exist, and
+ * the file's decay scope (the durability bar for what it should retain) — the
+ * inputs it needs to prioritize and route content correctly. That derivation
+ * lives here rather than at the call site because it is prompt-shaping logic,
+ * not orchestration.
  *
  * @param file The memory file being updated, including its filename, description, update mode, and optionally format and max tokens.
  * @param slice A slice of session turns to be compacted into the memory file, including the text content and the start and end turn indices.
@@ -33,6 +46,8 @@ export function buildMemoryCompactionPrompt(
   const formatHint = file.format
     ? `FORMAT: ${file.format} — preserve this structure across compactions.\n`
     : "";
+
+  const decayBlock = `${DECAY_GUIDANCE[file.decay]}\n`;
 
   const objectiveBlock = policy.objective ? `POLICY OBJECTIVE: ${policy.objective}\n` : "";
 
@@ -77,7 +92,7 @@ export function buildMemoryCompactionPrompt(
 ${objectiveBlock}MEMORY FILE: ${file.filename}
 PURPOSE: ${file.description}
 UPDATE MODE: ${file.update_mode}
-${formatHint}${triggerBlock}${siblingsBlock}
+${formatHint}${decayBlock}${triggerBlock}${siblingsBlock}
 ${taskBlock}
 
 SESSION SLICE (turns ${slice.start}–${slice.end}, user+assistant pairs):
