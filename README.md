@@ -63,13 +63,11 @@ Transitions are one-way within a session. A forked session starts Clean.
 ```
 claude-os/
 ├── packages/
-│   ├── core/          TypeScript ingestion, SQLite schema, DB access layer
-│   ├── server/        Hono API server (localhost:7842)
-│   └── mcp/           MCP server — Claude reads its own context health
+│   ├── core/          TypeScript ingestion, SQLite schema, DB access layer, pricing, compaction
+│   └── server/        Hono API server (localhost:7842) — sessions, projects, spend, policy, SSE
 ├── apps/
-│   ├── desktop/       Electron + React activity monitor window
-│   └── menu-bar/      Swift + AppKit menu bar sprite
-├── scripts/           Bulk ingest, export, and Claude Code hook
+│   └── desktop/       Electron + React activity monitor window
+├── scripts/           Bulk ingest, export, and Claude Code Stop hook
 ├── analysis/          Phase 0 notebooks — efficiency curve empirics
 └── docs/              Architecture, compaction templates, research notes
 ```
@@ -78,16 +76,16 @@ claude-os/
 
 | Layer | Choice |
 |---|---|
-| Runtime | Bun |
-| Session capture | Claude Code hooks (JSONL transcripts) |
-| Local store | SQLite via `better-sqlite3` + Drizzle ORM |
+| Runtime | Bun ≥ 1.1 |
+| Session capture | Claude Code `Stop` hook (JSONL transcripts) |
+| Local store | SQLite via `bun:sqlite` (built-in, no ORM) |
 | Local server | Hono |
-| Menu bar | Swift + AppKit (`NSStatusItem`) |
 | Main window | Electron + React + Vite |
 | Charts | Recharts |
 | State | Zustand |
-| Compaction LLM | Claude Sonnet |
-| MCP server | `@modelcontextprotocol/sdk` |
+| Compaction LLM | Claude Sonnet 4.6 (`claude-sonnet-4-6`) |
+| Pricing | Per-model cost table in `packages/core/src/pricing.ts` |
+| Real-time push | Server-Sent Events (`/events` endpoint) |
 
 ---
 
@@ -146,18 +144,44 @@ See [RUNBOOK.md](./RUNBOOK.md) for troubleshooting, environment variables, and T
 
 ## Database schema
 
+Five tables, managed by an append-only migration runner (`packages/core/src/db/migrate.ts`). Each migration runs once, in its own transaction, tracked by a `migrations` table.
+
 ```sql
-sessions(id, name, model, ctx_window, created_at, status, outcome_status)
+projects(id, cwd, name, created_at)
+
+sessions(
+  id, name, model, ctx_window,
+  created_at, last_active_at,
+  status, outcome_status,
+  project_id,           -- FK → projects
+  forked_from           -- FK → sessions (self-referential fork chain)
+)
 
 turns(
   id, session_id, turn_index,
   input_tokens, output_tokens, cumulative_tokens,
-  ctx_pct, latency_ms, stop_reason, created_at
+  cache_read_tokens, cache_creation_tokens, effective_input_tokens,
+  ctx_pct, latency_ms, stop_reason,
+  self_correction_count, repetition_score, output_density,
+  pricing_version, cwd,
+  created_at
 )
 
 gc_events(id, session_id, gc_type, ctx_pct_at_trigger, created_at)
 
-outcomes(id, session_id, label, resolved, resolved_at)
+compaction_policies(
+  id, project_id,       -- one policy per project
+  name, active, config,
+  created_at, updated_at
+)
+
+compaction_events(
+  id, session_id, policy_id,
+  triggered_by, trigger_detail,
+  files_written, tokens_at_trigger, output_size_tokens,
+  status,               -- running | completed | failed
+  started_at, completed_at, error
+)
 ```
 
 ---
@@ -182,14 +206,20 @@ outcomes(id, session_id, label, resolved, resolved_at)
 - [x] Electron + React, IPC to SQLite, macOS vibrancy
 - [x] Turn-by-turn token breakdown, GC event log
 
-### Phase 3 — Compaction Engine `← current`
-- [ ] One-click Compact & Fork action
-- [ ] Smart compaction prompt templates per project type
-- [ ] Persistent memory export → markdown / `CLAUDE.md` append
+### Phase 3 — Compaction Engine `✓`
+- [x] One-click Compact & Fork action (per-session action overflow)
+- [x] Compaction reads JSONL transcripts directly — summarises user/assistant turns into structured memory files under `~/.claude/projects/<cwd>/claude-os/memory/`
+- [x] Per-project compaction policy — configurable triggers (turn cadence, context %) stored in SQLite, editable from the UI
+- [x] Policy & Memory panel — view and manage per-project policies; peer into the memory files written by each compaction run
+- [x] Compaction event log with status tracking (`running | completed | failed`) and output token counts
+- [x] Context window resolved from plan tier at ingest time (`resolveContextWindow`) — Max plan sessions correctly use 1M window, not 200K
 
-### Phase 4 — Outcomes Layer
-- [ ] User-configurable outcome definitions per session type
-- [ ] Cost-per-outcome reporting (API spend / resolved outcomes)
+### Phase 4 — Cost Telemetry & Outcomes `← current`
+- [x] Per-turn cost computed from live pricing table (`packages/core/src/pricing.ts`) — Sonnet 4.6, Haiku 4.5, Opus 4.8 rates
+- [x] Cache-aware cost: separates `cache_read_tokens`, `cache_creation_tokens`, `effective_input_tokens`
+- [x] Daily spend view and per-session spend view in the activity monitor
+- [x] Project-level cost rollup in the By Project tree
+- [ ] Cost-per-outcome reporting (API spend / resolved work items)
 - [ ] Stalled session detection + escalation
 
 ### Phase 5 — Public Release
@@ -203,9 +233,9 @@ outcomes(id, session_id, label, resolved, resolved_at)
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for code style, commit conventions, and how to open a PR.
 
-Phase 3 is the active work surface. The most useful contributions right now:
+Phase 4 is the active work surface. The most useful contributions right now:
 
-- **Compaction prompt templates** — project-type-aware prompts that produce good `CLAUDE.md` seeds
+- **Cost-per-outcome modeling** — connecting API spend to resolved work items or session outcomes
 - **Quality proxy improvements** — better signal for output density or self-correction detection
 - **Cross-platform feedback** — the hook and ingest pipeline should work on Linux; reports welcome
 
@@ -225,4 +255,4 @@ MIT © [Tai Lin](https://github.com/TaiPanda96)
 
 ---
 
-*Built in Toronto. Phase 3 — June 2026.*
+*Built in Toronto. Phase 4 — June 2026.*
