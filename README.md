@@ -31,6 +31,20 @@ Claude OS makes it visible, measurable, and actionable.
 
 ---
 
+## Design principle: context minimalism, across the session boundary
+
+Anthropic's guidance for working with Claude is **context minimalism** — the smallest set of high-signal tokens that maximizes the likelihood of the right outcome. Claude OS is built to serve that principle, not fight it. The distinction that makes a *memory system* compatible with minimalism:
+
+> Context minimalism constrains the **working context of a single inference** — the tokens competing for attention. It does not constrain what you persist on disk. **Storage is free; context is expensive.**
+
+So the layers of this system divide cleanly. Compacting a session into typed files on disk costs the model zero attention — it's distillation, not loading. Eviction and token budgets *bound* the store, keeping retrieval cheap. The only operation that spends the attention budget is **seeding** memory into a new session — so that is the only place held to a strict minimalist standard: Claude OS seeds a thin **index** of what durable knowledge exists and lets the model pull the bodies just-in-time, rather than force-loading everything at session start.
+
+This is also why Claude OS is **complementary to native compaction, not a competitor.** Native compaction minimizes context *within* a session, under duress near the limit, and discards the result when the session ends. Claude OS minimizes the context a *new* session inherits — across a boundary the model is structurally blind to, with the result persisted, bounded, and observable. The litmus test we hold ourselves to: *a session with memory must reach productive work in fewer tokens than the same session cold-started.* If memory doesn't pay for itself, it's a preamble tax — and we measure it.
+
+> Full lifecycle design: [`docs/specs/spec-memory-eviction-lifecycle.md`](./docs/specs/spec-memory-eviction-lifecycle.md).
+
+---
+
 ## GC State Machine
 
 | State | Condition | Action |
