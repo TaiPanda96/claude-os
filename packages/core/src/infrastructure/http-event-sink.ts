@@ -1,13 +1,3 @@
-// Out-of-process implementation of CompactionEventSink.
-//
-// The live compaction path runs wherever the instrumented client lives — a separate process
-// from the Hono server that owns the SSE broadcast. This sink bridges that gap by POSTing
-// each lifecycle event to the server's `/webhooks/compaction` ingest endpoint (the "webhook"
-// in "fire webhook events that are logged in the server").
-//
-// Delivery is best-effort and fully non-blocking: a slow or down server must never stall or
-// crash the turn, so we never await the fetch and swallow every error.
-
 import type {
   CompactionEventSink,
   CompactionLifecycleEvent,
@@ -15,6 +5,13 @@ import type {
 
 const DEFAULT_SERVER_URL = "http://127.0.0.1:7842";
 
+/**
+ * HTTP implementation of CompactionEventSink. See comments on the interface and the module for details.
+ * Live compaction runs where the instrumented client lives — a separate process from the Hono server that owns the SSE broadcast.
+ * This sink bridges that gap by POSTing each lifecycle event to the server's `/webhooks/compaction` ingest endpoint (the "webhook" in "fire webhook events that are logged in the server").
+ * Delivery is best-effort and fully non-blocking: a slow or down server must never stall or crash the turn,
+ * so we never await the fetch and swallow every error.
+ */
 export class HttpEventSink implements CompactionEventSink {
   private readonly endpoint: string;
 

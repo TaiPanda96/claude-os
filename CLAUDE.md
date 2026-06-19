@@ -42,7 +42,8 @@ DB path: `CLAUDE_OS_DB_PATH` env var, else repo-root `claude-os.sqlite`. `getDb(
 - Compaction requires `ANTHROPIC_API_KEY` (`packages/core/.env`).
 
 ## Conventions
-
+- JS doc strings on functions & classes
+- Keep domain/business logic pure, isolate side effects with `io` (e.g - `create-turn-io.ts`)
 - TS strict (`tsconfig.base.json`, incl. `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`). No `any`; no `as` cast without a comment saying why. Comments explain *why*, not *what*.
 - Relative TS imports use `.js` extensions (NodeNext). `apps/desktop` is the one package on `node16` module resolution (Electron's Node main); all others use Bun's tsconfig.
 - Commit style: `type(scope): description` — `feat|fix|chore|docs|refactor|test` × `core|server|app|menu-bar|analysis|site`. One logical change per PR.

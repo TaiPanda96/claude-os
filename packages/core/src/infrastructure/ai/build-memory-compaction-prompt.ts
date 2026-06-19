@@ -1,26 +1,86 @@
-import { MemoryFile } from "../..";
+import { MemoryFile, CompactionPolicy, TriggerTypeEnum } from "../../types.js";
+import { memoryUpdateEnumType } from "./memory-schema.js";
 
+/**
+ * Builds a prompt instructing the LLM how to update a memory file based on a slice of session turns, according to the file's update mode and existing content.
+ *
+ * The prompt is framed with policy-level signal so the summarizer sees not just
+ * the leaf file it's writing, but what the whole memory set is for (the policy
+ * objective), why this run fired (the trigger), and which sibling files exist —
+ * the inputs it needs to prioritize and route content correctly. That derivation
+ * (objective framing, sibling routing list) lives here rather than at the call
+ * site because it is prompt-shaping logic, not orchestration.
+ *
+ * @param file The memory file being updated, including its filename, description, update mode, and optionally format and max tokens.
+ * @param slice A slice of session turns to be compacted into the memory file, including the text content and the start and end turn indices.
+ * @param existingContent The existing content of the memory file, if any, used for "append" and "merge" update modes to guide the LLM in determining what new content to add or how to reconcile with prior content.
+ * @param policy The owning policy — supplies the objective and the sibling files that frame this file within the wider memory set.
+ * @param trigger Why this compaction fired; the strongest signal of what to prioritize when deciding what to keep.
+ * @returns A string containing the prompt to be sent to the LLM for memory compaction.
+ */
 export function buildMemoryCompactionPrompt(
   file: MemoryFile,
   slice: { text: string; start: number; end: number },
   existingContent: string,
+  policy: CompactionPolicy,
+  trigger: { type: TriggerTypeEnum; detail: string },
 ): string {
-  const modeBlock =
-    file.update_mode === "merge"
-      ? `EXISTING FILE CONTENT:\n${existingContent}\n\nYour task: synthesize the existing content with the new session slice below into a single updated file. Preserve all prior content that remains valid. Update or retire content that the new slice contradicts or resolves.`
-      : file.update_mode === "append"
-        ? "Your task: extract content from the session slice below that belongs in this file. Write only new content — do not repeat anything already in the file. Begin your output directly. It will be appended below a separator."
-        : "Your task: write a fresh version of this file from the session slice below. Ignore any prior version — produce a complete, current snapshot.";
+  const updateMode = memoryUpdateEnumType.safeParse(file.update_mode);
+  if (!updateMode.success) {
+    throw new Error(`Memory update enum error: ${updateMode.error.message}`);
+  }
+
+  const formatHint = file.format
+    ? `FORMAT: ${file.format} — preserve this structure across compactions.\n`
+    : "";
+
+  const objectiveBlock = policy.objective ? `POLICY OBJECTIVE: ${policy.objective}\n` : "";
+
+  const triggerBlock = `TRIGGERED BY: ${trigger.type}${
+    trigger.detail ? ` — ${trigger.detail}` : ""
+  }\nPrioritize content relevant to this trigger when deciding what to keep.\n`;
+
+  // Expose the other files in this policy (filenames + purpose, never content) so
+  // the summarizer can route content to its rightful file instead of duplicating it.
+  const siblings = policy.memory_schema.filter((s) => s.filename !== file.filename);
+  const siblingsBlock = siblings.length
+    ? `OTHER FILES IN THIS POLICY (route their content there — do not duplicate it here):\n${siblings
+        .map((s) => `- ${s.filename}: ${s.description}`)
+        .join("\n")}\n`
+    : "";
+
+  let taskBlock: string;
+  switch (updateMode.data) {
+    case "append":
+      taskBlock = existingContent
+        ? `EXISTING FILE CONTENT (do not repeat anything already captured here):\n${existingContent}\n\nYour task: extract only net-new content from the session slice — decisions, facts, or events not already recorded above.`
+        : `Your task: extract content from the session slice that belongs in this file based on its purpose.`;
+      break;
+
+    case "merge":
+      taskBlock = existingContent
+        ? `EXISTING FILE CONTENT:\n${existingContent}\n\nYour task: synthesize the existing content with the new session slice into a single updated file. Preserve all prior content that remains valid. Remove (do not preserve) any content the new slice contradicts or resolves.`
+        : `Your task: synthesize the new session slice into a structured file based on its purpose.`;
+      break;
+
+    case "overwrite":
+      // existingContent intentionally not used — mode produces a clean snapshot
+      taskBlock = `Your task: write a complete, current snapshot of this file from the session slice. Do not preserve structure or content from any prior version.`;
+      break;
+
+    default:
+      throw new Error(`Unsupported memory update mode: ${file.update_mode}`);
+  }
 
   return `You are compacting a slice of a Claude session into a structured memory file.
 
-MEMORY FILE: ${file.filename}
+${objectiveBlock}MEMORY FILE: ${file.filename}
 PURPOSE: ${file.description}
 UPDATE MODE: ${file.update_mode}
+${formatHint}${triggerBlock}${siblingsBlock}
+${taskBlock}
 
-${modeBlock}
-
-SESSION SLICE (turns ${slice.start} to ${slice.end}):
+SESSION SLICE (turns ${slice.start}–${slice.end}, user+assistant pairs):
 ${slice.text}
 
 Output the file content directly. No preamble. No explanation.`;

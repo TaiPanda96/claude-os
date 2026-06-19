@@ -205,6 +205,7 @@ export interface MemoryFile {
   update_mode: UpdateMode;
   decay: DecayScope;
   max_tokens?: number; // default 8000; merge existing file capped separately at 4000
+  format?: string; // optional structural hint the summarizer preserves across compactions
 }
 
 export interface CompactionPolicy {
@@ -212,6 +213,9 @@ export interface CompactionPolicy {
   project_id: string;
   name: string;
   active: boolean;
+  // Policy-level intent that frames every file in the schema. Threaded into each
+  // compaction prompt so the summarizer knows what this whole memory set is for.
+  objective?: string;
   triggers: TriggerConfig[];
   memory_schema: MemoryFile[];
   cooldown_turns: number; // default 2

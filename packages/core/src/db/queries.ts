@@ -178,13 +178,21 @@ export function upsertPolicy(db: Database, policy: CompactionPolicy): void {
     project_id,
     name,
     active,
+    objective,
     triggers,
     memory_schema,
     cooldown_turns,
     created_at,
     updated_at,
   } = policy;
-  const config = JSON.stringify({ name, active, triggers, memory_schema, cooldown_turns });
+  const config = JSON.stringify({
+    name,
+    active,
+    objective,
+    triggers,
+    memory_schema,
+    cooldown_turns,
+  });
   db.prepare(
     `INSERT INTO compaction_policies (id, project_id, name, active, config, created_at, updated_at)
      VALUES ($id, $projectId, $name, $active, $config, $createdAt, $updatedAt)
