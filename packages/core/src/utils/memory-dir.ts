@@ -1,11 +1,14 @@
 import { homedir } from "os";
-import { join, basename } from "path";
+import { join } from "path";
 
-// Mirrors the convention Claude Code itself uses: ~/.claude/projects/<project-name>/
-// The project name is the basename of the cwd, matching how ingest resolves project names.
+// Mirrors the convention Claude Code itself uses: ~/.claude/projects/<slug>/memory/
+// Claude Code slugifies the full absolute path by replacing every "/" with "-",
+// so /Users/foo/bar/myproject → -Users-foo-bar-myproject. basename() produces a
+// different directory and would cause the monitor to read/write memory that Claude
+// Code never touches.
 export function memoryDir(cwd: string): string {
-  const projectName = basename(cwd) || "unknown";
-  return join(homedir(), ".claude", "projects", projectName, "memory");
+  const slug = cwd.replace(/\//g, "-") || "unknown";
+  return join(homedir(), ".claude", "projects", slug, "memory");
 }
 
 // Telemetry subfolder — one JSON file per turn, keyed by a random UUID.
