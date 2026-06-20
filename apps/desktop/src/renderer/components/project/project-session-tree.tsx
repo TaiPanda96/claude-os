@@ -151,7 +151,8 @@ export function ProjectSessionTree({
 
   // Sort groups: worst GC state first, then by most recent session
   const groups = [...groupMap.values()].sort((a, b) => {
-    const urgencyMap = { hard_gc: 0, soft_gc: 1, clean: 2 };
+    // aged ranks last — it's decay-driven staleness, not active context pressure.
+    const urgencyMap: Record<GCState, number> = { hard_gc: 0, soft_gc: 1, clean: 2, aged: 3 };
     const ud = urgencyMap[worstState(a.sessions)] - urgencyMap[worstState(b.sessions)];
     if (ud !== 0) return ud;
     const aLast = Math.max(...a.sessions.map((s) => s.last_active_at));

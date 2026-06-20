@@ -36,6 +36,7 @@ DB path: `CLAUDE_OS_DB_PATH` env var, else repo-root `claude-os.sqlite`. `getDb(
 ### Invariants worth not breaking
 
 - **Quality/health logic has one home each — don't re-inline it.** The per-turn quality formula lives in `packages/core/src/domain/quality-proxy.ts` (`qualityForTurn`); the session-level degradation stats (peak/inflection/trend/turnsToInflection) live in `packages/core/src/domain/session-trend.ts` (`computeSessionTrend`). Both `health.ts` (server) and `apps/desktop/src/renderer/quality.ts` (renderer) import from these — keep it that way so the two sides can't silently diverge across the wire.
+- **The GC-state union has one home: `packages/core/src/domain/gc-state.ts` (`GCState`).** It's a bun-free domain module precisely so the renderer can import the type without dragging in the `bun:sqlite`-coupled `types.ts` barrel; `types.ts` re-exports it, and `apps/desktop`'s `types.ts` re-exports it via `@claude-os/core/domain/gc-state.js`. Never re-declare `GCState` as a local subset (the renderer once omitted `"aged"`), and key every state→X map as `Record<GCState, …>` so the compiler forces coverage of all four states — `GC_COLOR`/`GC_TEXT` (`renderer/types.ts`) and `GC_LABEL` (`renderer/components/garbage-compaction-labels.ts`) are the shared maps; reuse them rather than inlining a fresh literal.
 - Ingest (live hook + bulk) funnels through `ingestJsonLFile` and writes `INSERT OR IGNORE` — idempotent, safe to re-run.
 - `scripts/hook-stop.ts` runs on every turn and **Claude Code blocks on it before returning control** — so it must stay fast, silent, do no network I/O, and exit 0 unconditionally.
 - Single-source-of-truth constants — GC thresholds (`GC_THRESHOLDS`), context windows (`MODEL_CONTEXT_WINDOWS`) in `types.ts`; compaction model selection in `compaction.ts`/`trigger-evaluator.ts`. Reference these by name; never copy their values into docs or other code.
@@ -44,6 +45,7 @@ DB path: `CLAUDE_OS_DB_PATH` env var, else repo-root `claude-os.sqlite`. `getDb(
 ## Conventions
 - JS doc strings on functions & classes
 - Keep domain/business logic pure, isolate side effects with `io` (e.g - `create-turn-io.ts`)
+- **Renderer components** (`apps/desktop/src/renderer`): one component per file, grouped by domain subdir (`components/<domain>/<name>.tsx`); lift its style object into a co-located `<name>-styles-config.ts`. Style/config files hold no JSX, so they are `.ts` (not `.tsx`) and `import type { CSSProperties } from "react"` rather than relying on the global `React` namespace. Don't re-inline a style table that already has a config file.
 - TS strict (`tsconfig.base.json`, incl. `exactOptionalPropertyTypes` + `noUncheckedIndexedAccess`). No `any`; no `as` cast without a comment saying why. Comments explain *why*, not *what*.
 - Relative TS imports use `.js` extensions (NodeNext). `apps/desktop` is the one package on `node16` module resolution (Electron's Node main); all others use Bun's tsconfig.
 - Commit style: `type(scope): description` — `feat|fix|chore|docs|refactor|test` × `core|server|app|menu-bar|analysis|site`. One logical change per PR.

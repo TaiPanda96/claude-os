@@ -1,5 +1,6 @@
 import React from "react";
 import { GC_COLOR, GC_TEXT, GCState, gcState } from "../types.js";
+import { GC_LABEL } from "./garbage-compaction-labels.js";
 import { tokens } from "../theme.js";
 
 interface Props {
@@ -13,12 +14,6 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
   const dotColor = GC_COLOR[state];
   const textColor = GC_TEXT[state];
   const pctDisplay = (ctxPct * 100).toFixed(1);
-
-  const stateLabel: Record<GCState, string> = {
-    clean:   "Clean",
-    soft_gc: "Soft GC",
-    hard_gc: "Hard GC",
-  };
 
   return (
     <div style={styles.container}>
@@ -34,7 +29,7 @@ export function ContextMeter({ ctxPct, turnCount, model }: Props) {
         </div>
         <div style={styles.divider} />
         <div>
-          <div style={{ ...styles.stat, color: textColor }}>{stateLabel[state]}</div>
+          <div style={{ ...styles.stat, color: textColor }}>{GC_LABEL[state]}</div>
           <div style={styles.label}>gc state</div>
         </div>
         <div style={styles.divider} />
