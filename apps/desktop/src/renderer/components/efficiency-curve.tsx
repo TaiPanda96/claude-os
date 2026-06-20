@@ -11,102 +11,12 @@ import {
 } from "recharts";
 import { Turn, GCEvent, GC_COLOR, GC_TEXT } from "../types.js";
 import { ChartPoint, Metric, computeQuality } from "../quality.js";
+import { efficiencyCurveStyles } from "./efficiency-curve-styles-config.js";
 import { tokens } from "../theme.js";
+import { METRIC_CONFIG } from "../metric-config.js";
 
-interface MetricMeta {
-  label: string;
-  signal: string;
-  formula: string;
-  watchFor: string;
-  yLabel: string;
-  color: string;
-}
-
-const METRIC_CONFIG: Record<Metric, MetricMeta> = {
-  quality: {
-    label: "Output Quality",
-    signal: "Is Claude degrading as context fills?",
-    formula: "0.5 × output density  +  0.3 × (1 − self-corrections)  +  0.2 × (1 − repetition)",
-    watchFor: "Sustained drops past 60% ctx — earlier the drop, the more context is hurting output",
-    yLabel: "quality score  [0–1]",
-    color: tokens.text,
-  },
-  marginalDensity: {
-    label: "Context Bloat Rate",
-    signal: "How fast is context inflating vs. useful output?",
-    formula: "new ctx tokens introduced this turn  ÷  output tokens produced",
-    watchFor: "Rising ratio → context growing faster than work — approaching diminishing returns",
-    yLabel: "bloat score (vs. 8× anchor)  [0–1]",
-    color: "#bf5af2",
-  },
-  workEfficiency: {
-    label: "Token Cost / Artifact",
-    signal: "Are meaningful turns getting more expensive to produce?",
-    formula: "new context tokens (trailing 10 turns)  ÷  useful turns in that window",
-    watchFor: "Rising curve = GC pressure — context grows faster than useful output appears",
-    yLabel: "token cost / artifact  [0–1, log]",
-    color: "#0a84ff",
-  },
-};
-
-function CustomDot(props: any) {
-  const {
-    cx,
-    cy,
-    payload,
-    metric,
-  }: { cx: number; cy: number; payload: ChartPoint; metric: Metric } = props;
-  const color =
-    metric === "quality"
-      ? (GC_COLOR[payload.gcState as keyof typeof GC_COLOR] ?? GC_COLOR.clean)
-      : METRIC_CONFIG[metric].color;
-  return <circle cx={cx} cy={cy} r={3} fill={color} fillOpacity={0.8} stroke="none" />;
-}
-
-function CustomTooltip({ active, payload, metric }: any) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload as ChartPoint;
-  const stateTextColor = GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
-  return (
-    <div style={tooltipStyle}>
-      <div style={{ color: stateTextColor, fontWeight: 600, marginBottom: 6 }}>
-        {d.ctxPct.toFixed(1)}% context · turn #{d.turnIndex}
-      </div>
-      <div style={tooltipRow}>
-        <span style={tooltipLabel}>quality</span>
-        <span style={tooltipValue}>{d.quality.toFixed(2)}</span>
-      </div>
-      <div style={tooltipRow}>
-        <span
-          style={{
-            ...tooltipLabel,
-            color: METRIC_CONFIG.marginalDensity.color,
-          }}
-        >
-          context bloat rate
-        </span>
-        <span style={tooltipValue}>
-          {d.marginalDensityRaw.toFixed(1)}x
-          <span style={{ color: tokens.muted, marginLeft: 4 }}>
-            ({d.marginalDensity.toFixed(2)})
-          </span>
-        </span>
-      </div>
-      <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>
-          token cost / artifact
-        </span>
-        <span style={tooltipValue}>
-          {d.workEfficiencyRaw.toLocaleString()} tok
-          <span style={{ color: tokens.muted, marginLeft: 4 }}>
-            ({d.workEfficiency.toFixed(2)})
-          </span>
-        </span>
-      </div>
-    </div>
-  );
-}
-
+const tooltipLabel: React.CSSProperties = { color: tokens.muted };
+const tooltipValue: React.CSSProperties = { color: tokens.highlight };
 const tooltipStyle: React.CSSProperties = {
   background: tokens.surface1,
   border: `1px solid ${tokens.border}`,
@@ -122,8 +32,6 @@ const tooltipRow: React.CSSProperties = {
   gap: 16,
   marginTop: 3,
 };
-const tooltipLabel: React.CSSProperties = { color: tokens.muted };
-const tooltipValue: React.CSSProperties = { color: tokens.highlight };
 
 type Props = {
   turns: Turn[];
@@ -136,7 +44,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
   const data = useMemo(() => computeQuality(turns), [turns]);
 
   if (data.length === 0) {
-    return <div style={styles.empty}>No turn data</div>;
+    return <div style={efficiencyCurveStyles.empty}>No turn data</div>;
   }
 
   // Auto-fit the X domain to the session's actual context range so the size of the
@@ -151,12 +59,14 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
   const cfg = METRIC_CONFIG[metric];
 
   return (
-    <div style={styles.container}>
+    <div style={efficiencyCurveStyles.container}>
       {/* Title */}
-      <div style={styles.title}>{sessionName ?? "Session"} — Context Efficiency Curve</div>
+      <div style={efficiencyCurveStyles.title}>
+        {sessionName ?? "Session"} — Context Efficiency Curve
+      </div>
 
       {/* Metric selector — card tabs */}
-      <div style={styles.metricTabs}>
+      <div style={efficiencyCurveStyles.metricTabs}>
         {(Object.keys(METRIC_CONFIG) as Metric[]).map((m) => {
           const active = metric === m;
           const mcfg = METRIC_CONFIG[m];
@@ -164,7 +74,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
             <button
               key={m}
               style={{
-                ...styles.metricTab,
+                ...efficiencyCurveStyles.metricTab,
                 borderLeftColor: active ? mcfg.color : "transparent",
                 background: active ? tokens.surface2 : tokens.surface1,
               }}
@@ -172,7 +82,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
             >
               <span
                 style={{
-                  ...styles.metricTabLabel,
+                  ...efficiencyCurveStyles.metricTabLabel,
                   color: active ? tokens.highlight : tokens.muted,
                 }}
               >
@@ -180,7 +90,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
               </span>
               <span
                 style={{
-                  ...styles.metricTabSignal,
+                  ...efficiencyCurveStyles.metricTabSignal,
                   color: active ? mcfg.color : tokens.border,
                 }}
               >
@@ -192,22 +102,22 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
       </div>
 
       {/* Signal bar — formula + what to watch for */}
-      <div style={styles.signalBar}>
-        <span style={styles.signalFormula}>
+      <div style={efficiencyCurveStyles.signalBar}>
+        <span style={efficiencyCurveStyles.signalFormula}>
           <span style={{ color: cfg.color, marginRight: 6 }}>ƒ</span>
           {cfg.formula}
         </span>
-        <span style={styles.signalWatch}>
+        <span style={efficiencyCurveStyles.signalWatch}>
           <span style={{ color: tokens.muted, marginRight: 4 }}>Watch:</span>
           {cfg.watchFor}
         </span>
       </div>
 
       {/* GC state legend */}
-      <div style={styles.legend}>
+      <div style={efficiencyCurveStyles.legend}>
         {(["clean", "soft_gc", "hard_gc"] as const).map((s) => (
-          <span key={s} style={styles.legendItem}>
-            <span style={{ ...styles.legendDot, background: GC_COLOR[s] }} />
+          <span key={s} style={efficiencyCurveStyles.legendItem}>
+            <span style={{ ...efficiencyCurveStyles.legendDot, background: GC_COLOR[s] }} />
             {s === "clean" ? "Clean <60%" : s === "soft_gc" ? "Soft GC 60–80%" : "Hard GC >80%"}
           </span>
         ))}
@@ -278,7 +188,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
             const seen = new Set<string>();
             return gcEvents.map((ev) => {
               const x = Math.round(ev.ctx_pct_at_trigger * 1000) / 10;
-              const color = GC_COLOR[ev.gc_type] ?? GC_COLOR.soft_gc;
+              const color = GC_COLOR[ev.gc_type as keyof typeof GC_COLOR] ?? GC_COLOR.soft_gc;
               const isFirst = !seen.has(ev.gc_type);
               if (isFirst) seen.add(ev.gc_type);
               return (
@@ -306,7 +216,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
           <Line
             type="monotone"
             dataKey={metric}
-            dot={<CustomDot metric={metric} />}
+            dot={<EfficiencyCurveDot metric={metric} />}
             activeDot={{ r: 5 }}
             stroke={cfg.color}
             strokeWidth={1.5}
@@ -318,102 +228,69 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
   );
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    flex: 1,
-    minHeight: 0,
-    display: "flex",
-    flexDirection: "column",
-    padding: `${tokens.sp3}px ${tokens.sp6}px ${tokens.sp4}px`,
-    overflow: "hidden",
-    background: tokens.surface0,
-  },
-  title: {
-    fontSize: tokens.fsBody,
-    fontWeight: 600,
-    color: tokens.muted,
-    fontFamily: tokens.fontMono,
-    marginBottom: tokens.sp2,
-  },
-  metricTabs: {
-    display: "grid",
-    gridTemplateColumns: "1fr 1fr 1fr",
-    gap: tokens.sp2,
-    marginBottom: tokens.sp2,
-  },
-  metricTab: {
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-start",
-    gap: 3,
-    padding: `${tokens.sp2}px ${tokens.sp3}px`,
-    borderRadius: tokens.radiusSm,
-    borderLeft: `3px solid transparent`,
-    border: `1px solid ${tokens.surface2}`,
-    borderLeftWidth: 3,
-    cursor: "pointer",
-    textAlign: "left" as const,
-    transition: "background 0.15s, border-color 0.15s",
-    fontFamily: tokens.fontMono,
-  },
-  metricTabLabel: {
-    fontSize: tokens.fsBody,
-    fontWeight: 600,
-    letterSpacing: "-0.01em",
-  },
-  metricTabSignal: {
-    fontSize: tokens.fsMicro,
-    lineHeight: 1.4,
-    fontStyle: "italic",
-  },
-  signalBar: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 2,
-    padding: `${tokens.sp2}px ${tokens.sp3}px`,
-    background: tokens.surface1,
-    borderRadius: tokens.radiusSm,
-    marginBottom: tokens.sp2,
-    borderLeft: `1px solid ${tokens.border}`,
-  },
-  signalFormula: {
-    fontSize: tokens.fsMicro,
-    color: tokens.text,
-    fontFamily: tokens.fontMono,
-    letterSpacing: "0.01em",
-  },
-  signalWatch: {
-    fontSize: tokens.fsMicro,
-    color: tokens.muted,
-    fontFamily: tokens.fontMono,
-  },
-  legend: {
-    display: "flex",
-    alignItems: "center",
-    gap: 20,
-    marginBottom: tokens.sp2,
-  },
-  legendItem: {
-    display: "flex",
-    alignItems: "center",
-    gap: 6,
-    fontSize: tokens.fsMicro,
-    color: tokens.muted,
-    fontFamily: tokens.fontMono,
-  },
-  legendDot: {
-    width: 7,
-    height: 7,
-    borderRadius: "50%",
-    flexShrink: 0,
-  },
-  empty: {
-    flex: 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    color: tokens.muted,
-    fontSize: tokens.fsBody,
-    fontFamily: tokens.fontMono,
-  },
-};
+interface EfficiencyCurveDotProps {
+  cx?: number;
+  cy?: number;
+  payload?: ChartPoint;
+  metric: Metric;
+}
+
+function EfficiencyCurveDot(props: EfficiencyCurveDotProps) {
+  const { cx, cy, payload, metric }: EfficiencyCurveDotProps = props;
+  if (cx === undefined || cy === undefined || payload === undefined) return null;
+  const color =
+    metric === "quality"
+      ? (GC_COLOR[payload.gcState as keyof typeof GC_COLOR] ?? GC_COLOR.clean)
+      : METRIC_CONFIG[metric].color;
+  return <circle cx={cx} cy={cy} r={3} fill={color} fillOpacity={0.8} stroke="none" />;
+}
+
+interface CustomTooltipProps {
+  active?: boolean;
+  payload?: any[];
+  metric: Metric;
+}
+
+function CustomTooltip({ active, payload, metric }: CustomTooltipProps) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload as ChartPoint;
+  const stateTextColor = GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
+  return (
+    <div style={tooltipStyle}>
+      <div style={{ color: stateTextColor, fontWeight: 600, marginBottom: 6 }}>
+        {d.ctxPct.toFixed(1)}% context · turn #{d.turnIndex}
+      </div>
+      <div style={tooltipRow}>
+        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.quality.color }}>quality</span>
+        <span style={tooltipValue}>{d.quality.toFixed(2)}</span>
+      </div>
+      <div style={tooltipRow}>
+        <span
+          style={{
+            ...tooltipLabel,
+            color: METRIC_CONFIG.marginalDensity.color,
+          }}
+        >
+          context bloat rate
+        </span>
+        <span style={tooltipValue}>
+          {d.marginalDensityRaw.toFixed(1)}x
+          <span style={{ color: tokens.muted, marginLeft: 4 }}>
+            ({d.marginalDensity.toFixed(2)})
+          </span>
+        </span>
+      </div>
+      <div style={tooltipRow}>
+        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>
+          token cost / artifact
+        </span>
+        <span style={tooltipValue}>
+          {d.workEfficiencyRaw.toLocaleString()} tok
+          <span style={{ color: tokens.muted, marginLeft: 4 }}>
+            ({d.workEfficiency.toFixed(2)})
+          </span>
+        </span>
+      </div>
+    </div>
+  );
+}

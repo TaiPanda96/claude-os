@@ -1,3 +1,11 @@
+// The GC state machine is owned by core (packages/core/src/domain/gc-state.ts — a
+// bun-free module so the renderer can import it). Re-export it here so the renderer
+// can't drift to a stale subset: it previously hand-declared a 3-state union that
+// omitted "aged", and the label/colour maps below silently inherited that gap (a
+// server-sent "aged" state would render as undefined).
+import type { GCState } from "@claude-os/core/domain/gc-state.js";
+export type { GCState };
+
 export interface SessionRow {
   id: string;
   name: string | null;
@@ -138,19 +146,21 @@ export interface SessionDetail {
   lastCompaction: CompactionEventSummary | null;
 }
 
-export type GCState = "clean" | "soft_gc" | "hard_gc";
-
+// ctx-driven states only — "aged" is time/decay-driven and assigned elsewhere, so
+// this never returns it. The return type stays the full GCState union from core.
 export function gcState(ctxPct: number): GCState {
   if (ctxPct >= 0.8) return "hard_gc";
   if (ctxPct >= 0.6) return "soft_gc";
   return "clean";
 }
 
-// Dot/glyph colors — matches design system gc-states.css
+// Dot/glyph colors — matches design system gc-states.css (and theme.ts `gc`).
+// Record<GCState, …> makes coverage of every state (incl. "aged") compiler-enforced.
 export const GC_COLOR: Record<GCState, string> = {
   clean:   "#22C55E",
   soft_gc: "#F59E0B",
   hard_gc: "#EF4444",
+  aged:    "#64748B",
 };
 
 // Text colors for badges, labels, numeric values
@@ -158,6 +168,7 @@ export const GC_TEXT: Record<GCState, string> = {
   clean:   "#4ADE80",
   soft_gc: "#FBBF24",
   hard_gc: "#F87171",
+  aged:    "#94A3B8",
 };
 
 export const SERVER = "http://localhost:7842";

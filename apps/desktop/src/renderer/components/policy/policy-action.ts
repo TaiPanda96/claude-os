@@ -1,5 +1,5 @@
-import { OverflowAction } from "./action-overflow.js";
-import { Project } from "../types.js";
+import { ActionOverflowType } from "../action-overflow.js";
+import { Project } from "../../types.js";
 
 /**
  * The project-scoped "Configure/Edit Policy" overflow item, shared by every
@@ -12,9 +12,9 @@ import { Project } from "../types.js";
 export function policyOverflowAction(
   project: Project | null,
   onConfigurePolicy: (projectId: string) => void,
-): OverflowAction {
+): ActionOverflowType {
   const hasPolicy = project?.has_policy === 1;
-  const action: OverflowAction = {
+  const action: ActionOverflowType = {
     key: "policy",
     glyph: "◆",
     label: hasPolicy ? "Edit Policy" : "Configure Policy",

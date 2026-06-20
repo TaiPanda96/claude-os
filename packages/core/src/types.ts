@@ -1,6 +1,9 @@
 export type { Database } from "bun:sqlite";
 
-export type GCState = "clean" | "soft_gc" | "hard_gc" | "aged";
+// Canonical home is domain/gc-state.ts (bun-free, so the renderer can import it too).
+// Imported locally (this file's interfaces reference it) and re-exported for consumers.
+import type { GCState } from "./domain/gc-state.js";
+export type { GCState };
 
 export type SessionStatus = "active" | "closed" | "archived";
 

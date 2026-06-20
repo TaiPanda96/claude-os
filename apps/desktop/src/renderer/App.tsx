@@ -1,14 +1,19 @@
-import React, { useEffect, useState, useCallback } from "react";
-import { ProjectSessionTree } from "./components/project-session-tree.js";
-import { SessionList } from "./components/session-list.js";
-import { SessionTable } from "./components/session-table.js";
-import { DetailPanel } from "./components/detail-panel.js";
-import { PolicyPanel } from "./components/policy-panel.js";
-import { MemoryPanel } from "./components/memory-panel.js";
+import { useEffect, useState, useCallback } from "react";
 import { CompactForkModal } from "./components/compact-fork-modal.js";
 import { SessionRow, SessionDetail, GCEvent, Project, SERVER } from "./types.js";
-import { tokens } from "./theme.js";
+import { appStyles } from "./app-styles-config.js";
+import { DetailPanel } from "./components/detail-panel.js";
+import { MemoryPanel } from "./components/memory/memory-panel.js";
+import { ProjectSessionTree } from "./components/project/project-session-tree.js";
+import { SessionTable } from "./components/session/session-table.js";
+import { PolicyPanel } from "./components/policy/policy-panel.js";
+import { SessionList } from "./components/session/session-list.js";
 
+/**
+ * Polling interval for fetching sessions and projects. We want this to be frequent enough that state changes (new sessions, policy updates)
+ * are reflected in a timely manner, but not so frequent that it causes undue load or jank.
+ * 5 seconds is a reasonable middle ground for a local-only tool like this, where changes are expected to be relatively infrequent and users will likely have multiple windows/tabs open.
+ */
 const POLL_MS = 5_000;
 const TTL_OPTIONS = [
   { label: "7d", days: 7 },
@@ -16,7 +21,13 @@ const TTL_OPTIONS = [
   { label: "All", days: 0 },
 ] as const;
 
+/**
+ * Main app component — fetches data and orchestrates the various views and panels. The session list and table are designed to be used together as a two-pane layout, but the
+ * project/session tree views can be used standalone, so we switch between them with a
+ * segmented control in the title bar.
+ */
 type ViewMode = "project" | "session" | "table";
+
 const VIEW_OPTIONS = [
   { label: "By Project", value: "project" },
   { label: "By Session", value: "session" },
@@ -137,10 +148,10 @@ export function App() {
 
   if (error) {
     return (
-      <div style={styles.error}>
-        <div style={styles.errorIcon}>⚠</div>
-        <div style={styles.errorText}>{error}</div>
-        <button style={styles.retryBtn} onClick={fetchSessions}>
+      <div style={appStyles.error}>
+        <div style={appStyles.errorIcon}>⚠</div>
+        <div style={appStyles.errorText}>{error}</div>
+        <button style={appStyles.retryBtn} onClick={fetchSessions}>
           Retry
         </button>
       </div>
@@ -148,9 +159,9 @@ export function App() {
   }
 
   return (
-    <div style={styles.root}>
+    <div style={appStyles.root}>
       {/* Title bar */}
-      <div style={styles.titleBar}>
+      <div style={appStyles.titleBar}>
         <svg
           width="16"
           height="16"
@@ -182,20 +193,20 @@ export function App() {
           <line x1="20" y1="14" x2="25" y2="22" stroke="#00C9A7" strokeWidth="0.8" opacity="0.5" />
           <line x1="15" y1="22" x2="25" y2="22" stroke="#00C9A7" strokeWidth="0.6" opacity="0.3" />
         </svg>
-        <span style={styles.titleText}>Claude OS</span>
-        <span style={styles.titleMeta}>
+        <span style={appStyles.titleText}>Claude OS</span>
+        <span style={appStyles.titleMeta}>
           {sessionCount} session{sessionCount !== 1 ? "s" : ""}
         </span>
 
         {/* Right-aligned controls: View mode + TTL filter */}
-        <div style={styles.controls}>
-          <div style={styles.segGroup}>
+        <div style={appStyles.controls}>
+          <div style={appStyles.segGroup}>
             {VIEW_OPTIONS.map((opt) => (
               <button
                 key={opt.value}
                 style={{
-                  ...styles.segBtn,
-                  ...(view === opt.value ? styles.segBtnActive : {}),
+                  ...appStyles.segBtn,
+                  ...(view === opt.value ? appStyles.segBtnActive : {}),
                 }}
                 onClick={() => setView(opt.value)}
               >
@@ -204,13 +215,13 @@ export function App() {
             ))}
           </div>
 
-          <div style={styles.segGroup}>
+          <div style={appStyles.segGroup}>
             {TTL_OPTIONS.map((opt) => (
               <button
                 key={opt.label}
                 style={{
-                  ...styles.segBtn,
-                  ...(ttlDays === opt.days ? styles.segBtnActive : {}),
+                  ...appStyles.segBtn,
+                  ...(ttlDays === opt.days ? appStyles.segBtnActive : {}),
                 }}
                 onClick={() => setTtlDays(opt.days)}
               >
@@ -222,11 +233,11 @@ export function App() {
       </div>
 
       {/* Main content — tree/table fills space, panels overlay from right */}
-      <div style={styles.content}>
+      <div style={appStyles.content}>
         {view === "table" ? (
           // SessionList (left nav) + SessionTable (detail) — the two redesigned
           // session views, mounted as the two-pane layout they were built for.
-          <div style={styles.tablePane}>
+          <div style={appStyles.tablePane}>
             <SessionList sessions={sessions} selected={selectedId} onSelect={handleSelect} />
             <SessionTable
               sessions={sessions}
@@ -304,111 +315,3 @@ export function App() {
     </div>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  root: {
-    display: "flex",
-    flexDirection: "column",
-    height: "100vh",
-    background: tokens.void,
-    userSelect: "none",
-    overflow: "hidden",
-    fontFamily: tokens.fontMono,
-  },
-  titleBar: {
-    height: 44,
-    display: "flex",
-    alignItems: "center",
-    paddingLeft: 80,
-    paddingRight: tokens.sp4,
-    gap: 10,
-    borderBottom: `0.5px solid ${tokens.border}`,
-    background: tokens.surface0,
-    // @ts-ignore
-    WebkitAppRegion: "drag",
-    flexShrink: 0,
-  },
-  titleText: {
-    fontSize: tokens.fsSection,
-    fontWeight: 600,
-    color: tokens.highlight,
-    letterSpacing: "-0.02em",
-    fontFamily: "-apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif",
-  },
-  titleMeta: {
-    fontSize: tokens.fsLabel,
-    color: tokens.muted,
-    fontFamily: tokens.fontMono,
-    letterSpacing: "0.02em",
-  },
-  controls: {
-    marginLeft: "auto",
-    display: "flex",
-    alignItems: "center",
-    gap: 10,
-    // @ts-ignore
-    WebkitAppRegion: "no-drag",
-  },
-  // Segmented control — used for both the View and TTL toggles
-  segGroup: {
-    display: "flex",
-    gap: 0,
-    background: tokens.void,
-    border: `0.5px solid ${tokens.surface2}`,
-    borderRadius: tokens.radiusSm,
-    overflow: "hidden",
-  },
-  segBtn: {
-    background: "transparent",
-    border: "none",
-    color: tokens.muted,
-    fontSize: tokens.fsMicro,
-    fontFamily: tokens.fontMono,
-    cursor: "pointer",
-    padding: "3px 9px",
-    letterSpacing: "0.04em",
-  },
-  segBtnActive: {
-    background: tokens.surface2,
-    color: tokens.highlight,
-  },
-  content: {
-    flex: 1,
-    position: "relative",
-    overflow: "hidden",
-    display: "flex",
-    flexDirection: "column",
-  },
-  tablePane: {
-    flex: 1,
-    minHeight: 0,
-    display: "flex",
-    flexDirection: "row",
-    overflow: "hidden",
-  },
-  error: {
-    height: "100vh",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: tokens.sp3,
-  },
-  errorIcon: { fontSize: 32, color: "#EF4444" },
-  errorText: {
-    color: tokens.muted,
-    fontSize: tokens.fsBody,
-    fontFamily: tokens.fontMono,
-  },
-  retryBtn: {
-    marginTop: tokens.sp1,
-    padding: "6px 16px",
-    background: tokens.surface1,
-    border: `1px solid ${tokens.border}`,
-    borderRadius: tokens.radiusMd,
-    color: tokens.highlight,
-    fontSize: tokens.fsData,
-    cursor: "pointer",
-    fontFamily: tokens.fontMono,
-  },
-};
