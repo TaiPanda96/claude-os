@@ -87,6 +87,12 @@ export async function compaction(
   try {
     const turns = getSessionTurns(db, sessionId);
     const lastEvent = getLastCompactionEvent(db, sessionId);
+    // `completed_at!` is sound because getLastCompactionEvent filters WHERE
+    // status = 'completed' — a failed or in-flight event never returns, so the
+    // watermark only ever advances past a finished compaction (the failed slice
+    // is naturally retried from the last success). If that filter is ever
+    // relaxed, this `!` degrades to `new Date(null)` → epoch → full-session
+    // replay on every compaction; keep the query and this assertion in lockstep.
     const fromTurnIndex = lastEvent
       ? turns.findIndex((t) => t.createdAt > new Date(lastEvent.completed_at!).getTime())
       : 0;
