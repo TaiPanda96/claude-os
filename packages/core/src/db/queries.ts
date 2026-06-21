@@ -128,6 +128,18 @@ export function insertGCEvent(db: Database, e: GCEvent): void {
   });
 }
 
+/**
+ * Returns every GC state-transition event for a session, oldest first — the
+ * input for the per-session GC timeline. Ordered by created_at ASC so the
+ * renderer can place events along the turn axis without re-sorting.
+ */
+export function getSessionGCEvents(db: Database, sessionId: string): GCEvent[] {
+  return db
+    .prepare(`SELECT * FROM gc_events WHERE session_id = $sessionId ORDER BY created_at ASC`)
+    .all({ $sessionId: sessionId })
+    .map(rowToGCEvent);
+}
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 export function resolveProjectId(db: Database, cwd: string): string {
   const existing = db.prepare(`SELECT id FROM projects WHERE cwd = $cwd`).get({ $cwd: cwd }) as
@@ -357,5 +369,15 @@ function rowToCompactionEvent(r: any): CompactionEvent {
     started_at: r.started_at,
     completed_at: r.completed_at ?? null,
     error: r.error ?? null,
+  };
+}
+
+function rowToGCEvent(r: any): GCEvent {
+  return {
+    id: r.id,
+    sessionId: r.session_id,
+    gcType: r.gc_type,
+    ctxPctAtTrigger: r.ctx_pct_at_trigger,
+    createdAt: r.created_at,
   };
 }
