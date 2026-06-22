@@ -3,6 +3,7 @@ export {
   getDb,
   getSession,
   getSessionTurns,
+  getSessionGCEvents,
   getAllSessions,
   closeSession,
 } from "./db.js";
