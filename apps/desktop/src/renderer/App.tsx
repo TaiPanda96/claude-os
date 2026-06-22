@@ -1,6 +1,13 @@
 import { useEffect, useState, useCallback } from "react";
 import { CompactForkModal } from "./components/compact-fork-modal.js";
-import { SessionRow, SessionDetail, GCEvent, Project, SERVER } from "./types.js";
+import {
+  SessionRow,
+  SessionDetail,
+  GCEvent,
+  CompactionEventDetail,
+  Project,
+  SERVER,
+} from "./types.js";
 import { appStyles } from "./app-styles-config.js";
 import { DetailPanel } from "./components/detail-panel.js";
 import { MemoryPanel } from "./components/memory/memory-panel.js";
@@ -43,6 +50,7 @@ export function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<SessionDetail | null>(null);
   const [gcEvents, setGcEvents] = useState<GCEvent[]>([]);
+  const [compactionEvents, setCompactionEvents] = useState<CompactionEventDetail[]>([]);
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [memoryProjectId, setMemoryProjectId] = useState<string | null>(null);
@@ -66,12 +74,14 @@ export function App() {
 
   const fetchDetail = useCallback(async (id: string) => {
     try {
-      const [detailRes, eventsRes] = await Promise.all([
+      const [detailRes, eventsRes, compactionRes] = await Promise.all([
         fetch(`${SERVER}/sessions/${id}`),
         fetch(`${SERVER}/sessions/${id}/gc-events`),
+        fetch(`${SERVER}/sessions/${id}/compaction-events`),
       ]);
       if (detailRes.ok) setDetail(await detailRes.json());
       if (eventsRes.ok) setGcEvents(await eventsRes.json());
+      if (compactionRes.ok) setCompactionEvents(await compactionRes.json());
     } catch {
       // non-critical
     }
@@ -108,6 +118,7 @@ export function App() {
       setSelectedId(null);
       setDetail(null);
       setGcEvents([]);
+      setCompactionEvents([]);
     } else {
       setSelectedId(id);
     }
@@ -127,6 +138,7 @@ export function App() {
     setSelectedId(null);
     setDetail(null);
     setGcEvents([]);
+    setCompactionEvents([]);
     setMemoryProjectId(null);
     setSelectedProjectId((prev) => (prev === projectId ? null : projectId));
   }
@@ -136,6 +148,7 @@ export function App() {
     setSelectedId(null);
     setDetail(null);
     setGcEvents([]);
+    setCompactionEvents([]);
     setSelectedProjectId(null);
     setMemoryProjectId((prev) => (prev === projectId ? null : projectId));
   }
@@ -269,10 +282,12 @@ export function App() {
             session={selected}
             detail={detail}
             gcEvents={gcEvents}
+            compactionEvents={compactionEvents}
             onClose={() => {
               setSelectedId(null);
               setDetail(null);
               setGcEvents([]);
+              setCompactionEvents([]);
             }}
           />
         )}
