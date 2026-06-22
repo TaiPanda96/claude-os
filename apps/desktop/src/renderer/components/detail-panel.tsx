@@ -1,14 +1,16 @@
 import React, { useState, useRef, useCallback } from "react";
 import { SessionRow, GCEvent, GC_TEXT, gcState } from "../types.js";
-import { SessionDetail } from "../types.js";
+import { SessionDetail, CompactionEventDetail } from "../types.js";
 import { EfficiencyCurve } from "./efficiency-curve.js";
 import { tokens } from "../theme.js";
 import { SessionSummary } from "./session/session-summary.js";
+import { CompactionHistory } from "./session/compaction-history.js";
 
 interface Props {
   session: SessionRow;
   detail: SessionDetail;
   gcEvents: GCEvent[];
+  compactionEvents: CompactionEventDetail[];
   onClose: () => void;
 }
 
@@ -16,7 +18,7 @@ const MIN_HEIGHT = 280;
 const MAX_HEIGHT = 720;
 const DEFAULT_HEIGHT = 420;
 
-export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
+export function DetailPanel({ session, detail, gcEvents, compactionEvents, onClose }: Props) {
   const [height, setHeight] = useState(DEFAULT_HEIGHT);
   const [copied, setCopied] = useState(false);
   const dragStart = useRef<{ y: number; h: number } | null>(null);
@@ -94,6 +96,7 @@ export function DetailPanel({ session, detail, gcEvents, onClose }: Props) {
           sessionName={session.name ?? undefined}
           gcEvents={gcEvents}
         />
+        <CompactionHistory events={compactionEvents} />
       </div>
     </div>
   );

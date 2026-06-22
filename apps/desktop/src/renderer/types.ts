@@ -109,6 +109,7 @@ export interface MemoryFileResult {
 
 export interface CompactionEventDetail {
   id: string;
+  triggered_by: string;
   tokens_at_trigger: number;
   output_size_tokens: number;
   status: string;
