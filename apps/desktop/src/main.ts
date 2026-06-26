@@ -1,23 +1,18 @@
-import {
-  app,
-  Tray,
-  Menu,
-  nativeImage,
-  Notification,
-  BrowserWindow,
-} from "electron";
+import { app, Tray, Menu, nativeImage, Notification, BrowserWindow } from "electron";
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 
+// Directory Settings
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.resolve(__dirname, "../../..");
 const SERVER_ENTRY = path.join(REPO_ROOT, "packages/server/src/index.ts");
+
+// App Polling Settings
 const POLL_INTERVAL_MS = 5_000;
 const SERVER_URL = "http://localhost:7842";
 
 // ── GC state ─────────────────────────────────────────────────────────────────
-
 type GCState = "clean" | "soft_gc" | "hard_gc";
 
 const GC_COLORS: Record<GCState, string> = {
@@ -39,7 +34,6 @@ function toGCState(ctxPct: number): GCState {
 }
 
 // ── Tray icon ────────────────────────────────────────────────────────────────
-
 function makeTrayIcon(state: GCState): Electron.NativeImage {
   const color = GC_COLORS[state];
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16">
@@ -51,30 +45,29 @@ function makeTrayIcon(state: GCState): Electron.NativeImage {
 }
 
 // ── Server lifecycle ──────────────────────────────────────────────────────────
-
 let serverProcess: ChildProcess | null = null;
 
 function startServer(): Promise<void> {
   return new Promise((resolve, reject) => {
-    serverProcess = spawn("bun", ["run", "--env-file", path.join(REPO_ROOT, ".env"), SERVER_ENTRY], {
-      cwd: REPO_ROOT,
-      stdio: ["ignore", "pipe", "pipe"],
-      env: {
-        ...process.env,
-        PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}`,
+    serverProcess = spawn(
+      "bun",
+      ["run", "--env-file", path.join(REPO_ROOT, ".env"), SERVER_ENTRY],
+      {
+        cwd: REPO_ROOT,
+        stdio: ["ignore", "pipe", "pipe"],
+        env: {
+          ...process.env,
+          PATH: `${process.env.HOME}/.bun/bin:${process.env.PATH}`,
+        },
       },
-    });
+    );
 
     serverProcess.on("error", (err) => {
       clearInterval(ready);
-      reject(
-        new Error(`Failed to spawn bun: ${err.message}. Is bun installed?`),
-      );
+      reject(new Error(`Failed to spawn bun: ${err.message}. Is bun installed?`));
     });
 
-    serverProcess.stderr?.on("data", (d) =>
-      console.error("[server]", d.toString().trim()),
-    );
+    serverProcess.stderr?.on("data", (d) => console.error("[server]", d.toString().trim()));
 
     // Poll health endpoint until ready
     let attempts = 0;
@@ -102,7 +95,6 @@ function stopServer() {
 }
 
 // ── Session polling ───────────────────────────────────────────────────────────
-
 interface SessionRow {
   id: string;
   name: string | null;
@@ -111,6 +103,7 @@ interface SessionRow {
   turn_count: number;
 }
 
+// ── Fetch Active Sessions ────────────────────────────────────────────────────
 async function fetchMostActiveSession(): Promise<SessionRow | null> {
   const res = await fetch(`${SERVER_URL}/sessions`);
   if (!res.ok) return null;
@@ -120,15 +113,13 @@ async function fetchMostActiveSession(): Promise<SessionRow | null> {
 }
 
 // ── App bootstrap ─────────────────────────────────────────────────────────────
-
 let tray: Tray | null = null;
 let win: BrowserWindow | null = null;
 let lastGCState: GCState = "clean";
 let lastTrend: "rising" | "flat" | "declining" = "flat";
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
-const IS_DEV =
-  process.argv.includes("--dev") || process.env.NODE_ENV === "development";
+const IS_DEV = process.argv.includes("--dev") || process.env.NODE_ENV === "development";
 const RENDERER_URL = IS_DEV
   ? "http://localhost:5173"
   : `file://${path.join(__dirname, "../renderer/index.html")}`;
@@ -155,11 +146,7 @@ function createWindow() {
   });
 }
 
-function buildContextMenu(
-  session: SessionRow | null,
-  gcState: GCState,
-  ctxPct: number,
-) {
+function buildContextMenu(session: SessionRow | null, gcState: GCState, ctxPct: number) {
   return Menu.buildFromTemplate([
     {
       label: session
@@ -231,11 +218,7 @@ async function poll() {
     }
 
     // Reactive fallback: hard GC transition (threshold-based, kept as safety net)
-    if (
-      gcState === "hard_gc" &&
-      lastGCState !== "hard_gc" &&
-      lastTrend !== "declining"
-    ) {
+    if (gcState === "hard_gc" && lastGCState !== "hard_gc" && lastTrend !== "declining") {
       new Notification({
         title: "Claude OS — Hard GC",
         body: `Session "${session?.name ?? "unnamed"}" is at ${Math.min(ctxPct * 100, 100).toFixed(0)}% context. Consider compacting.`,
@@ -250,6 +233,7 @@ async function poll() {
   }
 }
 
+// App Polling
 app.whenReady().then(async () => {
   app.dock?.hide(); // menu bar only — no dock icon
 
