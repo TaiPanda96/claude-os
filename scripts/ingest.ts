@@ -17,7 +17,7 @@ import { homedir } from "os";
 import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
 import { printIngestStats } from "@claude-os/core/ingest/print-ingest-stats.js";
 import { migrateDb } from "@claude-os/core/db/migrate.js";
-import { walkClaudeDirectoryIo } from "./walk-claude-directory-io";
+import { walkClaudeDirectoryIo } from "./walk-claude-directory-io.js";
 
 const PROJECTS = join(homedir(), ".claude", "projects");
 
