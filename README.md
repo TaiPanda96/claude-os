@@ -1,6 +1,11 @@
 # Claude OS
 
-> A macOS activity monitor for Claude sessions. Real-time token economics, context window health, and GC state tracking — before quality degrades.
+> **A policy-driven advisor for your coding agents.** Define how a project should
+> spend its context budget; Claude OS measures every session against that policy,
+> tells you the one action that keeps it efficient, and turns bloated sessions
+> into durable memory the next session inherits.
+
+> Positioning & product spine: [`PRODUCT.md`](./PRODUCT.md). This README is the technical tour.
 
 ![Phase](https://img.shields.io/badge/phase-4%20%E2%80%94%20policy%20UI-34c759?style=flat-square)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=flat-square)
@@ -13,21 +18,41 @@
 
 Every Claude session has a **context efficiency curve**. In the early portion of a session, each input produces high-quality, well-grounded output. Past a certain token depth — typically around 70–80% of the context window — the signal-to-noise ratio of accumulated context degrades. The model attends equally to stale intermediate outputs, abandoned threads, and retried phrasings as it does to your original goals and constraints.
 
-This is the **garbage threshold**. It's currently invisible to users.
+This is the **garbage threshold**. It's currently invisible to users — and the only tools you have to act on it are blunt: clear the session, or let it rot.
 
-Claude OS makes it visible, measurable, and actionable.
+Claude OS makes it visible, measurable, and **actionable on your terms**. Not a black box that silently compresses your context (the autopilot model), but an **advisor**: it explains *why* a session is degrading and recommends *what to do about it*, then executes that action on one click.
 
 ---
 
+## The one primitive: a Policy
+
+Everything in Claude OS hangs off one concept — **a policy, attached to a project.** A policy answers three questions and nothing else:
+
+| A policy defines | The question | Examples |
+|---|---|---|
+| **Metrics** | *What do we measure?* | context utilisation %, token spend / turn, Quality Proxy, Work Efficiency, GC state |
+| **Triggers** | *When do we compact?* | turn cadence, context threshold, architectural-decision / outcome-resolved detection, custom semantic classifier |
+| **Eviction** | *What gets written to memory, and when is it stale?* | per-file memory schema — update mode (overwrite / append / merge), decay scope (session / project / permanent) |
+
+You write a policy once per project. From then on, Claude OS runs one loop: **Track → Advise/Execute → Manage memory.**
+
 ## What it does
 
-- **Instruments** Claude Code sessions via a `Stop` hook — captures input tokens, output tokens, cumulative context, latency, and stop reason per turn
-- **Computes** a session-level context utilisation percentage in real time
-- **Tracks** a quality proxy signal (output density, self-correction markers, turn-over-turn repetition) per turn
-- **Plots** the efficiency curve per session — showing exactly where quality inflects
-- **Surfaces** a four-state GC status: `Clean → Soft GC → Hard GC → Aged`
-- **Organises** sessions by project topology — switch between a **By Project** tree and a flat **By Session** view, with per-project policy banners
-- **Runs** policy-driven compaction — configurable triggers (turn cadence, context threshold, semantic classifiers) distil turns into structured memory files under `~/.claude/projects/<cwd>/claude-os/memory/`
+**Tracks** — instruments Claude Code sessions via a `Stop` hook and computes, per turn:
+- Token spend per turn — cache-aware (read / creation / effective input), priced
+- A **Quality Proxy** (output density, self-correction markers, turn-over-turn repetition) and the session degradation curve (peak, inflection, trend)
+- **Work Efficiency** across the curve, rolled up into a four-state GC status: `Clean → Soft GC → Hard GC → Aged`
+- Every metric exists because a policy *trigger* can fire on it — measurement and policy share one vocabulary
+
+**Advises & executes** — policy-driven compaction:
+- When a policy's triggers are met, Claude OS surfaces a single **prescriptive recommendation** with projected savings (tokens & context freed, cost avoided)
+- The recommendation *is* the action — one click runs the same `policy-driven-compaction` an automatic trigger would, distilling turns into the memory schema. There is no separate "manual" path with different rules
+- One verb, two lineage choices: **compact in place** (session continues, leaner) or **compact & fork** (branch a fresh session seeded with distilled context)
+
+**Manages memory** — the durable artifact:
+- Compaction writes a typed, inspectable memory store under `~/.claude/projects/<cwd>/claude-os/memory/`, seeded into every new Claude session in that project
+- **Read, export, and manage** it; every action links to what it wrote, so the loop closes
+- **Organises** sessions by project topology — a **By Project** tree or a flat **By Session** view, with per-project policy banners
 
 ---
 
@@ -47,14 +72,16 @@ This is also why Claude OS is **complementary to native compaction, not a compet
 
 ## GC State Machine
 
-| State | Condition | Action |
+The GC state is one of the **metrics** a policy measures; crossing a threshold is what a **trigger** fires on and what the advisor recommends acting upon.
+
+| State | Condition | Recommended action |
 |---|---|---|
 | **Clean** | ctx < 60% | Continue normally |
-| **Soft GC** | ctx 60–80% | Summarise thread, compact before continuing |
-| **Hard GC** | ctx > 80% | Fork session — new session seeded with distilled context |
-| **Aged** | Closed, unresolved | Archive to persistent memory / `CLAUDE.md` |
+| **Soft GC** | ctx 60–80% | Compact before continuing — leaner context, same session |
+| **Hard GC** | ctx > 80% | Compact & fork — new session seeded with distilled context |
+| **Aged** | Closed, unresolved | Archive to persistent project memory |
 
-Transitions are one-way within a session. A forked session starts Clean.
+Transitions are one-way within a session. A forked session starts Clean. Thresholds are policy-configurable; defaults live in `GC_THRESHOLDS`.
 
 ---
 
@@ -66,7 +93,7 @@ claude-os/
 │   ├── core/          TypeScript ingestion, SQLite schema, DB access layer, pricing, compaction
 │   └── server/        Hono API server (localhost:7842) — sessions, projects, spend, policy, SSE
 ├── apps/
-│   └── desktop/       Electron + React activity monitor window
+│   └── desktop/       Electron + React advisor window
 ├── scripts/           Bulk ingest, export, and Claude Code Stop hook
 ├── analysis/          Phase 0 notebooks — efficiency curve empirics
 └── docs/              Architecture, compaction templates, research notes
@@ -123,13 +150,13 @@ bun run ingest          # bulk ingest from ~/.claude/projects/
 bun run export          # export sessions as JSON → analysis/sessions/
 ```
 
-**3. Start the activity monitor**
+**3. Start the advisor**
 
 ```bash
 bun run dev
 ```
 
-This runs four processes concurrently — Hono API server (`:7842`), Vite renderer (`:5173`), TypeScript watch, and Electron. The tray icon appears in your macOS menu bar; left-click to open the activity monitor window.
+This runs four processes concurrently — Hono API server (`:7842`), Vite renderer (`:5173`), TypeScript watch, and Electron. The tray icon appears in your macOS menu bar; left-click to open the advisor window.
 
 **Verify the server is up:**
 
@@ -207,7 +234,7 @@ compaction_events(
 - [x] Turn-by-turn token breakdown, GC event log
 
 ### Phase 3 — Compaction Engine `✓`
-- [x] One-click Compact & Fork action (per-session action overflow)
+- [x] One-click compaction (compact in place / compact & fork) from the per-session action overflow
 - [x] Compaction reads JSONL transcripts directly — summarises user/assistant turns into structured memory files under `~/.claude/projects/<cwd>/claude-os/memory/`
 - [x] Per-project compaction policy — configurable triggers (turn cadence, context %) stored in SQLite, editable from the UI
 - [x] Policy & Memory panel — view and manage per-project policies; peer into the memory files written by each compaction run
@@ -217,13 +244,19 @@ compaction_events(
 ### Phase 4 — Cost Telemetry & Outcomes `← current`
 - [x] Per-turn cost computed from live pricing table (`packages/core/src/pricing.ts`) — Sonnet 4.6, Haiku 4.5, Opus 4.8 rates
 - [x] Cache-aware cost: separates `cache_read_tokens`, `cache_creation_tokens`, `effective_input_tokens`
-- [x] Daily spend view and per-session spend view in the activity monitor
+- [x] Daily spend view and per-session spend view in the advisor
 - [x] Project-level cost rollup in the By Project tree
 - [ ] Cost-per-outcome reporting (API spend / resolved work items)
 - [ ] Stalled session detection + escalation
 
-### Phase 5 — Public Release
-- [ ] MCP server — Claude reads its own context health in real time
+### Phase 5 — Advisor & Ergonomics `← next`
+- [ ] Prescriptive recommendation surface — proactively present the single best action (with projected token/cost savings) when a policy trigger is met, rather than only on-demand in the compaction modal
+- [ ] Front-end refactor — collapse the Compact / Fork / Compact & Fork actions into one **Compact** verb with a lineage choice; promote *peer-into-memory* next to the actions that write memory
+- [ ] Landing page refactor — lead with use cases and the Advisor positioning from [`PRODUCT.md`](./PRODUCT.md)
+- [ ] Split the policy model in the UI — **Metrics / Triggers / Eviction** as distinct sections; manual compaction depends only on the memory schema, never erroring on "no active policy"
+
+### Phase 6 — Public Release
+- [ ] MCP server — Claude reads its own context health in real time, and can request compaction by policy
 - [ ] Empirical research write-up: efficiency curves across session types
 - [ ] `brew install claude-os`
 
