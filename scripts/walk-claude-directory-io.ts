@@ -1,5 +1,5 @@
-import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file";
-import { Database } from "@claude-os/core/types";
+import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file.js";
+import type { Database } from "bun:sqlite";
 import { existsSync, readdirSync } from "fs";
 import { join } from "path";
 
