@@ -4,6 +4,9 @@ export type { Database } from "bun:sqlite";
 // Imported locally (this file's interfaces reference it) and re-exported for consumers.
 import type { GCState } from "./domain/gc-state.js";
 export type { GCState };
+// GC thresholds + the ctx→state classifier also live in the bun-free gc-state module
+// (so the renderer/metrics engine can use them); re-exported here for core's consumers.
+export { GC_THRESHOLDS, computeGCState } from "./domain/gc-state.js";
 
 export type SessionStatus = "active" | "closed" | "archived";
 
@@ -73,11 +76,6 @@ export const SELF_CORRECTION_MARKERS = [
   "i take that back",
   "i need to correct myself",
 ] as const;
-
-export const GC_THRESHOLDS = {
-  soft: 0.6,
-  hard: 0.8,
-} as const;
 
 export interface GCEvent {
   id: string;
@@ -149,12 +147,6 @@ export interface UserRecord {
   sessionId: string;
   timestamp: string;
   message: { content: string | Array<{ type: string; text?: string }> };
-}
-
-export function computeGCState(ctxPct: number): GCState {
-  if (ctxPct >= GC_THRESHOLDS.hard) return "hard_gc";
-  if (ctxPct >= GC_THRESHOLDS.soft) return "soft_gc";
-  return "clean";
 }
 
 export interface Project {

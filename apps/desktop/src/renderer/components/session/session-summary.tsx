@@ -1,6 +1,7 @@
 import React, { useMemo } from "react";
 import { Turn, GCEvent, GC_TEXT } from "../../types.js";
-import { computeQuality, sessionSummaryStats } from "../../quality.js";
+// bun-free metrics subpath — not the @claude-os/core barrel (which pulls in bun:sqlite).
+import { computeMetrics, sessionSummaryStats } from "@claude-os/core/domain/metrics/index.js";
 import { tokens } from "../../theme.js";
 
 const styles: Record<string, React.CSSProperties> = {
@@ -46,7 +47,7 @@ interface Props {
 
 export function SessionSummary({ turns, gcEvents }: Props) {
   const stats = useMemo(() => {
-    const points = computeQuality(turns);
+    const points = computeMetrics(turns);
     const firstEvent = gcEvents[0] ?? null;
     return sessionSummaryStats(
       points,
