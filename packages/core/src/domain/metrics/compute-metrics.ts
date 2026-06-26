@@ -35,8 +35,9 @@ export function computeMetrics(turns: MetricTurn[]): ChartPoint[] {
   // Run each metric's declared calculation once over the whole series. Scaled values are
   // rounded to 2dp for stable plotting; raw values are kept exact for the tooltip/summary.
   const series = {} as Record<Metric, MetricValue[]>;
-  for (const calc of Object.values(METRIC_CALCULATORS)) {
-    series[calc.key] = calc.computeRaw(ctx).map((raw) => ({
+  for (const key of Object.keys(METRIC_CALCULATORS) as Metric[]) {
+    const calc = METRIC_CALCULATORS[key];
+    series[key] = calc.computeRaw(ctx).map((raw) => ({
       raw,
       scaled: Math.round(calc.scale(raw) * 100) / 100,
     }));
