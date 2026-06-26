@@ -27,7 +27,7 @@ export function walkClaudeDirectoryIo(
       process.exit(1);
     }
     console.log(`Ingesting ${values.file}...`);
-    const r = ingestJsonLFile(db, values.file, { verbose: true });
+    const r = ingestJsonLFile(db, values.file, { verbose: values.verbose });
     totalSessions += r.sessions;
     totalTurns += r.turns;
     totalSkipped += r.skipped;
