@@ -51,7 +51,7 @@ export function walkClaudeDirectoryIo(
       if (!values.verbose) process.stdout.write(`${projectDir.slice(0, 50).padEnd(52)}`);
 
       for (const file of jsonlFiles) {
-        const r = ingestJsonLFile(db, join(dir, file), { verbose: true });
+        const r = ingestJsonLFile(db, join(dir, file), { verbose: values.verbose });
         totalSessions += r.sessions;
         totalTurns += r.turns;
         totalSkipped += r.skipped;
