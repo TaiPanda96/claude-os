@@ -158,25 +158,25 @@ export function gcState(ctxPct: number): GCState {
 // Dot/glyph colors — matches design system gc-states.css (and theme.ts `gc`).
 // Record<GCState, …> makes coverage of every state (incl. "aged") compiler-enforced.
 export const GC_COLOR: Record<GCState, string> = {
-  clean:   "#22C55E",
+  clean: "#22C55E",
   soft_gc: "#F59E0B",
   hard_gc: "#EF4444",
-  aged:    "#64748B",
+  aged: "#64748B",
 };
 
 // Text colors for badges, labels, numeric values
 export const GC_TEXT: Record<GCState, string> = {
-  clean:   "#4ADE80",
+  clean: "#4ADE80",
   soft_gc: "#FBBF24",
   hard_gc: "#F87171",
-  aged:    "#94A3B8",
+  aged: "#94A3B8",
 };
 
 export const SERVER = "http://localhost:7842";
 
 // Model pricing for client-side savings estimates — mirrors packages/core/src/pricing.ts
 export const MODEL_PRICING: Record<string, { inputPerM: number }> = {
-  "claude-sonnet-4-6":        { inputPerM: 3.0 },
+  "claude-sonnet-4-6": { inputPerM: 3.0 },
   "claude-haiku-4-5-20251001": { inputPerM: 0.8 },
-  "claude-opus-4-8":          { inputPerM: 15.0 },
+  "claude-opus-4-8": { inputPerM: 15.0 },
 };

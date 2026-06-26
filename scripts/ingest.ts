@@ -12,13 +12,12 @@
 import { program } from "@commander-js/extra-typings";
 import { parseArgs } from "util";
 import { Database } from "bun:sqlite";
-import { readdirSync, existsSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
-import { ingestJsonLFile } from "@claude-os/core/ingest/ingest-jsonl-file.js";
 import { initializeSchemas } from "@claude-os/core/ingest/initialize-schemas.js";
 import { printIngestStats } from "@claude-os/core/ingest/print-ingest-stats.js";
 import { migrateDb } from "@claude-os/core/db/migrate.js";
+import { walkClaudeDirectoryIo } from "./walk-claude-directory-io.js";
 
 const PROJECTS = join(homedir(), ".claude", "projects");
 
@@ -63,53 +62,8 @@ program
       printIngestStats(db, { databasePath: DB_PATH });
       process.exit(0);
     }
-
-    let totalSessions = 0,
-      totalTurns = 0,
-      totalSkipped = 0;
-
-    if (values.file) {
-      if (!existsSync(values.file)) {
-        console.error(`File not found: ${values.file}`);
-        process.exit(1);
-      }
-      console.log(`Ingesting ${values.file}...`);
-      const r = ingestJsonLFile(db, values.file, { verbose: true });
-      totalSessions += r.sessions;
-      totalTurns += r.turns;
-      totalSkipped += r.skipped;
-    } else {
-      // Walk ~/.claude/projects/
-      const projectDirs = readdirSync(PROJECTS).filter((d) => {
-        if (values.project) return d.includes(values.project);
-        return true;
-      });
-
-      for (const projectDir of projectDirs) {
-        const dir = join(PROJECTS, projectDir);
-        let jsonlFiles: string[];
-        try {
-          jsonlFiles = readdirSync(dir).filter((f) => f.endsWith(".jsonl"));
-        } catch {
-          continue;
-        }
-
-        if (jsonlFiles.length === 0) continue;
-        if (!values.verbose) process.stdout.write(`${projectDir.slice(0, 50).padEnd(52)}`);
-
-        for (const file of jsonlFiles) {
-          const r = ingestJsonLFile(db, join(dir, file), { verbose: true });
-          totalSessions += r.sessions;
-          totalTurns += r.turns;
-          totalSkipped += r.skipped;
-        }
-        if (!values.verbose) console.log(`${jsonlFiles.length} file(s)`);
-      }
-    }
+    walkClaudeDirectoryIo(db, { values, projectDirRoot: PROJECTS });
     printIngestStats(db, { databasePath: DB_PATH });
-    console.log(
-      `\n\x1b[32m✓\x1b[0m Ingested ${totalTurns} new turns across ${totalSessions} sessions (${totalSkipped} already present)\n`,
-    );
   });
 
 program.parse();

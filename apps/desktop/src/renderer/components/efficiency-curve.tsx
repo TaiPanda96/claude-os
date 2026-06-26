@@ -10,7 +10,9 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { Turn, GCEvent, GC_COLOR, GC_TEXT } from "../types.js";
-import { ChartPoint, Metric, computeQuality } from "../quality.js";
+// Import from the bun-free metrics subpath, NOT the @claude-os/core barrel — the barrel
+// pulls in db.ts (bun:sqlite), which the Electron renderer/vite can't resolve.
+import { ChartPoint, Metric, computeMetrics } from "@claude-os/core/domain/metrics/index.js";
 import { efficiencyCurveStyles } from "./efficiency-curve-styles-config.js";
 import { tokens } from "../theme.js";
 import { METRIC_CONFIG } from "../metric-config.js";
@@ -41,7 +43,7 @@ type Props = {
 
 export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
   const [metric, setMetric] = useState<Metric>("quality");
-  const data = useMemo(() => computeQuality(turns), [turns]);
+  const data = useMemo(() => computeMetrics(turns), [turns]);
 
   if (data.length === 0) {
     return <div style={efficiencyCurveStyles.empty}>No turn data</div>;
@@ -155,7 +157,7 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
               fontSize: tokens.fsLabel,
             }}
           />
-          <Tooltip content={<CustomTooltip metric={metric} />} />
+          <Tooltip content={<CustomTooltip />} />
 
           {/* Zone threshold markers */}
           <ReferenceLine
@@ -215,7 +217,8 @@ export function EfficiencyCurve({ turns, sessionName, gcEvents = [] }: Props) {
 
           <Line
             type="monotone"
-            dataKey={metric}
+            dataKey={(d: ChartPoint) => d.metrics[metric].scaled}
+            name={metric}
             dot={<EfficiencyCurveDot metric={metric} />}
             activeDot={{ r: 5 }}
             stroke={cfg.color}
@@ -248,10 +251,9 @@ function EfficiencyCurveDot(props: EfficiencyCurveDotProps) {
 interface CustomTooltipProps {
   active?: boolean;
   payload?: any[];
-  metric: Metric;
 }
 
-function CustomTooltip({ active, payload, metric }: CustomTooltipProps) {
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload as ChartPoint;
   const stateTextColor = GC_TEXT[d.gcState as keyof typeof GC_TEXT] ?? GC_TEXT.clean;
@@ -260,37 +262,26 @@ function CustomTooltip({ active, payload, metric }: CustomTooltipProps) {
       <div style={{ color: stateTextColor, fontWeight: 600, marginBottom: 6 }}>
         {d.ctxPct.toFixed(1)}% context · turn #{d.turnIndex}
       </div>
-      <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.quality.color }}>quality</span>
-        <span style={tooltipValue}>{d.quality.toFixed(2)}</span>
-      </div>
-      <div style={tooltipRow}>
-        <span
-          style={{
-            ...tooltipLabel,
-            color: METRIC_CONFIG.marginalDensity.color,
-          }}
-        >
-          context bloat rate
-        </span>
-        <span style={tooltipValue}>
-          {d.marginalDensityRaw.toFixed(1)}x
-          <span style={{ color: tokens.muted, marginLeft: 4 }}>
-            ({d.marginalDensity.toFixed(2)})
-          </span>
-        </span>
-      </div>
-      <div style={tooltipRow}>
-        <span style={{ ...tooltipLabel, color: METRIC_CONFIG.workEfficiency.color }}>
-          token cost / artifact
-        </span>
-        <span style={tooltipValue}>
-          {d.workEfficiencyRaw.toLocaleString()} tok
-          <span style={{ color: tokens.muted, marginLeft: 4 }}>
-            ({d.workEfficiency.toFixed(2)})
-          </span>
-        </span>
-      </div>
+      {/* One row per metric, driven by METRIC_CONFIG — no per-metric markup to keep in sync.
+          The scaled value is shown in parens only when it differs from the raw rendering
+          (so the already-normalised quality metric shows a single number). */}
+      {(Object.keys(METRIC_CONFIG) as Metric[]).map((key) => {
+        const cfg = METRIC_CONFIG[key];
+        const { raw, scaled } = d.metrics[key];
+        const rawText = cfg.formatRaw(raw);
+        const scaledText = scaled.toFixed(2);
+        return (
+          <div key={key} style={tooltipRow}>
+            <span style={{ ...tooltipLabel, color: cfg.color }}>{cfg.label}</span>
+            <span style={tooltipValue}>
+              {rawText}
+              {rawText !== scaledText && (
+                <span style={{ color: tokens.muted, marginLeft: 4 }}>({scaledText})</span>
+              )}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

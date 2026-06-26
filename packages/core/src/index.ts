@@ -43,6 +43,30 @@ export type { QualitySignals } from "./domain/quality-proxy.js";
 export { computeSessionTrend } from "./domain/session-trend.js";
 export type { TrendPoint, SessionTrend } from "./domain/session-trend.js";
 export {
+  computeMetrics,
+  buildMetricContext,
+  sessionSummaryStats,
+  METRIC_CALCULATORS,
+  effectiveInputs,
+  newContextTokens,
+  marginalDensityRaw,
+  scaleMarginalDensity,
+  classifyArtifacts,
+  workEfficiencyRaw,
+  scaleWorkEfficiency,
+  logScale,
+  WORK_WINDOW,
+} from "./domain/metrics/index.js";
+export type {
+  Metric,
+  MetricValue,
+  MetricCalculator,
+  MetricContext,
+  MetricTurn,
+  ChartPoint,
+  SessionStats,
+} from "./domain/metrics/index.js";
+export {
   AnthropicLlm,
   llmPortFactory,
 } from "./infrastructure/anthropic-llm.js";

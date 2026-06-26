@@ -98,26 +98,6 @@ export function evaluateCompactionTriggers(
 }
 
 /**
- * Helper to determine how many turns have occurred since the last compaction event for this session.
- * This is used to enforce the cooldown period defined in the compaction policy, preventing too-frequent compactions.
- * It uses a combination of database lookups and an in-memory tracker to provide an efficient and reasonably accurate count.
- * @param db
- * @param sessionId
- * @param currentTurnIndex
- * @returns
- */
-function turnsSinceLastCompaction(
-  db: Database,
-  sessionId: string,
-  currentTurnIndex: number,
-): number {
-  const last = getLastCompactionEvent(db, sessionId);
-  if (!last || !last.completed_at) return currentTurnIndex + 1;
-  // Approximate: we don't store the turn_index at compaction time, use a conservative estimate
-  return cooldownTracker.get(sessionId) ?? currentTurnIndex + 1;
-}
-
-/**
  * Check if a given trigger condition is met based on the current turn and recent output, using the provided classifier port for semantic triggers.
  * @param trigger
  * @param turn
@@ -201,4 +181,24 @@ async function checkTrigger(
     }
   }
   return { fired: false, detail: "" };
+}
+
+/**
+ * Helper to determine how many turns have occurred since the last compaction event for this session.
+ * This is used to enforce the cooldown period defined in the compaction policy, preventing too-frequent compactions.
+ * It uses a combination of database lookups and an in-memory tracker to provide an efficient and reasonably accurate count.
+ * @param db
+ * @param sessionId
+ * @param currentTurnIndex
+ * @returns
+ */
+function turnsSinceLastCompaction(
+  db: Database,
+  sessionId: string,
+  currentTurnIndex: number,
+): number {
+  const last = getLastCompactionEvent(db, sessionId);
+  if (!last || !last.completed_at) return currentTurnIndex + 1;
+  // Approximate: we don't store the turn_index at compaction time, use a conservative estimate
+  return cooldownTracker.get(sessionId) ?? currentTurnIndex + 1;
 }

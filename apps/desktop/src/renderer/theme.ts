@@ -15,8 +15,7 @@ export const tokens = {
   text: "#E0E0E0",
   highlight: "#F8F8F8",
 
-  fontMono:
-    "'Berkeley Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
+  fontMono: "'Berkeley Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace",
 
   fsDisplay: 22,
   fsSection: 15,
